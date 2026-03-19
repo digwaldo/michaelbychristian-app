@@ -50,10 +50,13 @@ const useClientLayout = () => {
 // ── Stellar direct reads ───────────────────────────────────────
 async function callContract(fn: string, args: any[] = []): Promise<any> {
   const Sdk = await import("@stellar/stellar-sdk" as any);
+  //TODO: create server + contract instances
   const server = new Sdk.rpc.Server(RPC_URL);
   const contract = new Sdk.Contract(CONTRACT);
+  //TODO: create dummy account
   const keypair = Sdk.Keypair.random();
   const account = new Sdk.Account(keypair.publicKey(), "0");
+
   const tx = new Sdk.TransactionBuilder(account, {
     fee: Sdk.BASE_FEE,
     networkPassphrase: PASSPHRASE,
@@ -61,6 +64,7 @@ async function callContract(fn: string, args: any[] = []): Promise<any> {
     .addOperation(contract.call(fn, ...args))
     .setTimeout(30)
     .build();
+  //Readonly contract interaction
   const sim = await server.simulateTransaction(tx);
   if (!Sdk.rpc.Api.isSimulationSuccess(sim))
     throw new Error("Simulation failed");
@@ -71,6 +75,7 @@ async function callContract(fn: string, args: any[] = []): Promise<any> {
 // Tokens owned by ANY other address are sold
 const ADMIN_WALLET = "GB2GKZ22XFF5BZWRV6AIO7JLCDT7W36Y5DFIUWPENA5IIDEAH7FLXOA3";
 
+//normalize image URLs
 function resolveImg(img: string | undefined): string | null {
   if (!img) return null;
   if (img.startsWith("ipfs://"))
@@ -145,11 +150,19 @@ export default function CollectionScreen() {
         try {
           // Fetch token data and owner simultaneously
           const [raw, ownerRaw] = await Promise.all([
-            callContract("token_data", [Sdk.nativeToScVal(i, { type: "u64" })]),
+            callContract("full_token_data", [
+              Sdk.nativeToScVal(i, { type: "u64" }),
+            ]),
             callContract("owner_of", [
               Sdk.nativeToScVal(i, { type: "u64" }),
             ]).catch(() => null),
           ]);
+
+          console.log(`TOKEN ${i}`, raw);
+          console.log(
+            `TOKEN ${i} KEYS`,
+            raw && typeof raw === "object" ? Object.keys(raw) : null,
+          );
 
           const t = raw.traits || {};
 
