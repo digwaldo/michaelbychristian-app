@@ -19,7 +19,7 @@ export const C = {
 
 export const BACKEND = "https://michael-by-christian.vercel.app";
 export const CONTRACT =
-  "CACP7SFR7K5MVX4ZRGOTK4WX5NDPQUTFUJTIGU4LJZVDJGILYT2YRDEQ";
+  "CB7GCGWAHWCF3SAJTYCR7JEFINLJBKA3LV7BZNAI46OXYPYZSTFZ6EMB";
 export const RPC_URL = "https://soroban-testnet.stellar.org";
 export const NETWORK = "TESTNET";
 export const PASSPHRASE = "Test SDF Network ; September 2015";
