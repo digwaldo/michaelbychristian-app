@@ -306,9 +306,7 @@ export default function CollectionScreen() {
           {/* Edition type — top right, available items only */}
           {!item.sold && item.edition_type ? (
             <View style={s.editionBadge}>
-              <Text style={s.editionBadgeTxt}>
-                {item.edition_type.replace(" Provenance", "")}
-              </Text>
+              <Text style={s.editionBadgeTxt}>{item.edition_type}</Text>
             </View>
           ) : null}
 
