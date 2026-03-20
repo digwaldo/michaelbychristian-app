@@ -122,9 +122,15 @@ interface NFTItem {
   archive_status: string;
   tailored_year: string;
   design_year: string;
+
+  rarity_score: number;
+  rarity_rank: number;
+  rarity_label: string;
+  rarity_percentile: number;
+  trait_count: number;
 }
 
-type SortKey = "price_asc" | "price_desc" | "newest" | "name_asc";
+type SortKey = "price_asc" | "price_desc" | "newest" | "name_asc" | "rarity";
 
 interface Filters {
   silhouette: string[];
@@ -132,6 +138,7 @@ interface Filters {
   edition_type: string[];
   status: string[];
   price: string[];
+  rarity_bucket: string[];
   primary_color: string[];
   secondary_color: string[];
   primary_texture: string[];
@@ -155,6 +162,7 @@ const emptyFilters: Filters = {
   edition_type: [],
   status: [],
   price: [],
+  rarity_bucket: [],
   primary_color: [],
   secondary_color: [],
   primary_texture: [],
@@ -193,6 +201,101 @@ const traitKeys: (keyof Filters)[] = [
   "design_year",
 ];
 
+const rarityTraitKeys: (keyof NFTItem)[] = [
+  "silhouette",
+  "model",
+  "edition_type",
+  "primary_color",
+  "secondary_color",
+  "primary_texture",
+  "secondary_texture",
+  "textured_pattern",
+  "hardware",
+  "interior_lining",
+  "authentication",
+  "collection",
+  "collaboration",
+  "design_status",
+  "archive_status",
+  "tailored_year",
+  "design_year",
+];
+
+function getPresentTraitKeys(item: NFTItem) {
+  return rarityTraitKeys.filter((k) => {
+    const v = item[k];
+    return typeof v === "string" && v.trim() !== "";
+  });
+}
+
+function getRarityLabel(rank: number, total: number) {
+  if (!total) return "—";
+  const pct = (rank / total) * 100;
+  if (pct <= 5) return "Haute";
+  if (pct <= 15) return "Très rare";
+  if (pct <= 35) return "Prestige";
+  if (pct <= 65) return "Signature";
+  return "Essential";
+}
+
+function addRarity(items: NFTItem[]): NFTItem[] {
+  const total = items.length;
+  if (!total) return items;
+
+  const counts: Record<string, Record<string, number>> = {};
+  for (const key of rarityTraitKeys) {
+    counts[String(key)] = {};
+  }
+
+  const traitCountFreq: Record<number, number> = {};
+
+  for (const item of items) {
+    const presentKeys = getPresentTraitKeys(item);
+    traitCountFreq[presentKeys.length] =
+      (traitCountFreq[presentKeys.length] || 0) + 1;
+
+    for (const key of presentKeys) {
+      const value = String(item[key]).trim();
+      counts[String(key)][value] = (counts[String(key)][value] || 0) + 1;
+    }
+  }
+
+  const scored = items.map((item) => {
+    const presentKeys = getPresentTraitKeys(item);
+    let score = 0;
+
+    for (const key of presentKeys) {
+      const value = String(item[key]).trim();
+      const count = counts[String(key)][value] || 1;
+      score += total / count;
+    }
+
+    const tcCount = traitCountFreq[presentKeys.length] || 1;
+    score += total / tcCount;
+
+    return {
+      ...item,
+      rarity_score: score,
+      rarity_rank: 0,
+      rarity_label: "",
+      rarity_percentile: 100,
+      trait_count: presentKeys.length,
+    };
+  });
+
+  scored.sort((a, b) => b.rarity_score - a.rarity_score);
+
+  return scored.map((item, idx) => {
+    const rank = idx + 1;
+    return {
+      ...item,
+      rarity_rank: rank,
+      rarity_label: getRarityLabel(rank, total),
+      rarity_percentile: (rank / total) * 100,
+    };
+  });
+}
+
 // ── Component ─────────────────────────────────────────────────
 export default function CollectionScreen() {
   const { isPhone, isWeb } = useClientLayout();
@@ -207,7 +310,6 @@ export default function CollectionScreen() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [stats, setStats] = useState({ total: 0, listed: 0 });
 
-  // Responsive layout — mirrors index.tsx
   const sidePad = isPhone ? 18 : 24;
   const maxW = isWeb ? 900 : undefined;
   const COLS = isWeb ? 3 : 2;
@@ -275,18 +377,26 @@ export default function CollectionScreen() {
               archive_status: t.archive_status || raw?.archive_status || "",
               tailored_year: t.tailored_year || raw?.tailored_year || "",
               design_year: t.design_year || raw?.design_year || "",
+
+              rarity_score: 0,
+              rarity_rank: 0,
+              rarity_label: "",
+              rarity_percentile: 100,
+              trait_count: 0,
             });
           } catch {
             // skip failed tokens
           }
         }
 
-        setAll(items);
+        const enriched = addRarity(items);
+
+        setAll(enriched);
         setStats({
-          total: items.length,
-          listed: items.filter((n) => n.listed && !n.sold).length,
+          total: enriched.length,
+          listed: enriched.filter((n) => n.listed && !n.sold).length,
         });
-        applyAll(items, filters, sort);
+        applyAll(enriched, filters, sort);
       } catch (e: any) {
         setError(e.message || "Could not connect to Stellar");
       } finally {
@@ -324,7 +434,6 @@ export default function CollectionScreen() {
     if (f.price.length) {
       r = r.filter((n) => {
         const price = n.price_usdc / 100;
-
         return f.price.some((bucket) => {
           if (bucket === "under200") return price < 200;
           if (bucket === "200to300") return price >= 200 && price <= 300;
@@ -334,10 +443,25 @@ export default function CollectionScreen() {
       });
     }
 
+    if (f.rarity_bucket.length) {
+      r = r.filter((n) => {
+        return f.rarity_bucket.some((bucket) => {
+          if (bucket === "top10")
+            return n.rarity_rank > 0 && n.rarity_rank <= 10;
+          if (bucket === "top25")
+            return n.rarity_rank > 0 && n.rarity_rank <= 25;
+          if (bucket === "top50")
+            return n.rarity_rank > 0 && n.rarity_rank <= 50;
+          return false;
+        });
+      });
+    }
+
     if (s === "price_asc") r.sort((a, b) => a.price_usdc - b.price_usdc);
     if (s === "price_desc") r.sort((a, b) => b.price_usdc - a.price_usdc);
     if (s === "name_asc") r.sort((a, b) => a.name.localeCompare(b.name));
     if (s === "newest") r.sort((a, b) => b.tokenId - a.tokenId);
+    if (s === "rarity") r.sort((a, b) => a.rarity_rank - b.rarity_rank);
 
     setDisplayed(r);
   }
@@ -414,7 +538,6 @@ export default function CollectionScreen() {
     );
   }
 
-  // ── Card — same aesthetic as home bag cards ────────────────
   function renderCard({ item }: { item: NFTItem }) {
     const init = item.name
       .split(" ")
@@ -445,7 +568,7 @@ export default function CollectionScreen() {
           <View style={s.imgOverlay} />
 
           <View style={s.tokenBadge}>
-            <Text style={s.tokenBadgeTxt}>#{item.tokenId}</Text>
+            <Text style={s.tokenBadgeTxt}>Edition #{item.tokenId}</Text>
           </View>
 
           {!item.sold && item.edition_type ? (
@@ -471,19 +594,36 @@ export default function CollectionScreen() {
               <Text style={s.nfcBadgeTxt}>✦ NFC</Text>
             </View>
           ) : null}
+
+          {!!item.rarity_rank && (
+            <View style={s.rarityBadge}>
+              <Text style={s.rarityBadgeTxt}>{item.rarity_label}</Text>
+            </View>
+          )}
+
+          {!!item.rarity_rank && (
+            <View style={s.rarityRankBadge}>
+              <Text style={s.rarityBadgeTxt}>
+                Rarity Rank {item.rarity_rank}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={s.cardBody}>
           <Text style={s.cardSilhouette} numberOfLines={1}>
-            {item.silhouette || "MBC"}
+            {item.silhouette || "MBC"} · Silhouette
           </Text>
           <Text style={s.cardName} numberOfLines={2}>
             {item.name}
           </Text>
           <Text style={s.cardSub} numberOfLines={1}>
-            {[item.primary_texture, item.hardware]
+            {[item.primary_texture, item.primary_color]
               .filter(Boolean)
               .join(" · ") || "NFC Embedded"}
+          </Text>
+          <Text style={s.cardRarity} numberOfLines={1}>
+            Rarity Rank · #{item.rarity_rank}
           </Text>
         </View>
 
@@ -525,7 +665,6 @@ export default function CollectionScreen() {
     );
   }
 
-  // ── Filter chip component ──────────────────────────────────
   const Chip = ({
     label,
     active,
@@ -606,6 +745,7 @@ export default function CollectionScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {(
                   [
+                    ["rarity", "Rarest"],
                     ["price_asc", "Price ↑"],
                     ["price_desc", "Price ↓"],
                     ["newest", "Newest"],
@@ -731,6 +871,27 @@ export default function CollectionScreen() {
             {renderTraitSection("Silhouette", silhouettes, "silhouette")}
             {renderTraitSection("Model", models, "model")}
             {renderTraitSection("Edition Type", editions, "edition_type")}
+
+            <View style={s.filterSection}>
+              <Text style={s.filterSectionLbl}>Rarity</Text>
+              <View style={s.chips}>
+                <Chip
+                  label="Top 10"
+                  active={filters.rarity_bucket.includes("top10")}
+                  onPress={() => toggleFilter("rarity_bucket", "top10")}
+                />
+                <Chip
+                  label="Top 25"
+                  active={filters.rarity_bucket.includes("top25")}
+                  onPress={() => toggleFilter("rarity_bucket", "top25")}
+                />
+                <Chip
+                  label="Top 50"
+                  active={filters.rarity_bucket.includes("top50")}
+                  onPress={() => toggleFilter("rarity_bucket", "top50")}
+                />
+              </View>
+            </View>
 
             <View style={s.filterSection}>
               <Text style={s.filterSectionLbl}>Status</Text>
@@ -1023,7 +1184,7 @@ const s = StyleSheet.create({
   tokenBadge: {
     position: "absolute",
     top: 8,
-    left: 8,
+    right: 8,
     backgroundColor: "rgba(12,11,9,0.88)",
     borderWidth: 1,
     borderColor: C.border,
@@ -1039,7 +1200,7 @@ const s = StyleSheet.create({
   editionBadge: {
     position: "absolute",
     top: 8,
-    right: 8,
+    left: 8,
     backgroundColor: "rgba(12,11,9,0.85)",
     borderWidth: 1,
     borderColor: C.borderBright,
@@ -1102,6 +1263,33 @@ const s = StyleSheet.create({
     color: C.green,
     fontWeight: "600",
   },
+  rarityBadge: {
+    position: "absolute",
+    top: 34,
+    left: 8,
+    backgroundColor: "rgba(184,150,62,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(184,150,62,0.45)",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  rarityRankBadge: {
+    position: "absolute",
+    top: 34,
+    right: 8,
+    backgroundColor: "rgba(184,150,62,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(184,150,62,0.45)",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  rarityBadgeTxt: {
+    fontSize: 7,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    color: C.goldLt,
+    fontWeight: "700",
+  },
 
   cardBody: { padding: 10 },
   cardSilhouette: {
@@ -1120,6 +1308,12 @@ const s = StyleSheet.create({
     marginBottom: 3,
   },
   cardSub: { fontSize: 9, color: C.muted, letterSpacing: 0.5 },
+  cardRarity: {
+    marginTop: 4,
+    fontSize: 9,
+    color: C.goldLt,
+    letterSpacing: 0.3,
+  },
 
   cardFoot: {
     flexDirection: "row",
