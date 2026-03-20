@@ -295,7 +295,7 @@ export default function HomeScreen() {
 
   // Responsive values (now using client layout)
   const sidePad = isPhone ? 18 : 24;
-  const heroH = isPhone ? h * 0.82 : isTablet ? h * 0.78 : 540;
+  const heroH = isPhone ? Math.min(h * 0.58, 460) : isTablet ? h * 0.68 : 540;
   const heroTitleSize = isPhone ? 40 : isTablet ? 48 : 58;
   const h2Size = isPhone ? 28 : 36;
   const maxW = isWeb ? 760 : undefined;
@@ -388,7 +388,7 @@ export default function HomeScreen() {
               <VideoView
                 player={player}
                 style={s.heroVideo}
-                contentFit="cover"
+                contentFit={isPhone ? "contain" : "cover"}
                 nativeControls={false}
                 allowsFullscreen={false}
                 startsPictureInPictureAutomatically={false}
@@ -396,7 +396,11 @@ export default function HomeScreen() {
             </View>
 
             <LinearGradient
-              colors={["transparent", "rgba(12,11,9,0.6)", C.black]}
+              colors={
+                isPhone
+                  ? ["transparent", "rgba(12,11,9,0.28)", "rgba(12,11,9,0.82)"]
+                  : ["transparent", "rgba(12,11,9,0.6)", C.black]
+              }
               locations={[0.2, 0.65, 1]}
               style={s.heroOverlay}
             />
@@ -851,11 +855,7 @@ const s = StyleSheet.create({
     bottom: 0,
     left: 0,
     overflow: "hidden",
-  },
-
-  heroVideo: {
-    width: "100%",
-    height: "100%",
+    zIndex: 0,
   },
 
   heroOverlay: {
@@ -864,6 +864,17 @@ const s = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
+    zIndex: 1,
+  },
+
+  heroContent: {
+    paddingBottom: 44,
+    zIndex: 2,
+  },
+
+  heroVideo: {
+    width: "100%",
+    height: "100%",
   },
 
   heroTextBlock: {
@@ -873,7 +884,6 @@ const s = StyleSheet.create({
   heroTextBlockWide: {
     marginLeft: 80,
   },
-  heroContent: { paddingBottom: 44 },
   heroInner: {},
   heroEye: {
     fontSize: 9,
