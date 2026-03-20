@@ -2,12 +2,12 @@
 
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
+import { VideoView, useVideoPlayer } from "expo-video";
 import React, { useEffect, useRef, useState } from "react";
 import {
     Animated,
     Dimensions,
     Image,
-    ImageBackground,
     Platform,
     ScrollView,
     StyleSheet,
@@ -21,22 +21,26 @@ import { C } from "../lib/theme";
 // ── Client-only layout detection ───────────────────────────────
 const useClientLayout = () => {
   const [layout, setLayout] = useState({
-    w: 375, // safe mobile fallback
+    w: 375,
     h: 812,
     isPhone: true,
     isTablet: false,
     isWeb: false,
+    isWebWide: false,
   });
 
   useEffect(() => {
     const update = () => {
       const dims = Dimensions.get("window");
+      const isWeb = Platform.OS === "web";
+
       setLayout({
         w: dims.width,
         h: dims.height,
         isPhone: dims.width < 480,
         isTablet: dims.width >= 480 && dims.width < 900,
-        isWeb: Platform.OS === "web" && dims.width >= 900,
+        isWeb: isWeb && dims.width >= 900,
+        isWebWide: isWeb && dims.width >= 1400,
       });
     };
 
@@ -248,12 +252,29 @@ const ts = StyleSheet.create({
 // ── Main Home Screen ────────────────────────────────────────────
 export default function HomeScreen() {
   const layout = useClientLayout();
-  const { w, h, isPhone, isTablet, isWeb } = layout;
+  const { w, h, isPhone, isTablet, isWeb, isWebWide } = layout;
 
   const [menuOpen, setMenuOpen] = useState(false);
 
   const fade = useRef(new Animated.Value(0)).current;
   const slideY = useRef(new Animated.Value(24)).current;
+
+  const player = useVideoPlayer(require("../assets/hero-video.mp4"));
+
+  useEffect(() => {
+    player.loop = true;
+    player.muted = true;
+
+    const start = async () => {
+      try {
+        player.play();
+      } catch (e) {
+        console.log("Video autoplay failed:", e);
+      }
+    };
+
+    start();
+  }, [player]);
 
   useEffect(() => {
     Animated.parallel([
@@ -274,7 +295,7 @@ export default function HomeScreen() {
 
   // Responsive values (now using client layout)
   const sidePad = isPhone ? 18 : 24;
-  const heroH = isPhone ? h * 0.82 : h * 0.88;
+  const heroH = isPhone ? h * 0.82 : isTablet ? h * 0.78 : 540;
   const heroTitleSize = isPhone ? 40 : isTablet ? 48 : 58;
   const h2Size = isPhone ? 28 : 36;
   const maxW = isWeb ? 760 : undefined;
@@ -361,106 +382,119 @@ export default function HomeScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* ── HERO ── */}
-        <ImageBackground
-          source={require("../assets/hero.jpg")}
-          style={[s.hero, { minHeight: heroH }]}
-          resizeMode="cover"
-          imageStyle={{ opacity: 0.85 }}
-        >
-          <LinearGradient
-            colors={["transparent", "rgba(12,11,9,0.6)", C.black]}
-            locations={[0.2, 0.65, 1]}
-            style={StyleSheet.absoluteFillObject}
-          />
-          <Animated.View
-            style={[
-              s.heroContent,
-              { opacity: fade, transform: [{ translateY: slideY }] },
-            ]}
-          >
-            <View
+        <View style={s.heroSection}>
+          <View style={[s.heroFrame, { height: heroH, width: "100%" }]}>
+            <View style={s.heroMedia}>
+              <VideoView
+                player={player}
+                style={s.heroVideo}
+                contentFit="cover"
+                nativeControls={false}
+                allowsFullscreen={false}
+                startsPictureInPictureAutomatically={false}
+              />
+            </View>
+
+            <LinearGradient
+              colors={["transparent", "rgba(12,11,9,0.6)", C.black]}
+              locations={[0.2, 0.65, 1]}
+              style={s.heroOverlay}
+            />
+
+            <Animated.View
               style={[
-                s.heroInner,
-                { paddingHorizontal: sidePad },
-                maxW
-                  ? { maxWidth: maxW, alignSelf: "center", width: "100%" }
-                  : {},
+                s.heroContent,
+                { opacity: fade, transform: [{ translateY: slideY }] },
               ]}
             >
-              <Text
-                style={[
-                  s.heroEye,
-                  isPhone && { fontSize: 8, letterSpacing: 2 },
-                ]}
-              >
-                Phygital · Luxury Fashion · Stellar · Est. 2026
-              </Text>
-              <Text
-                style={[
-                  s.heroTitle,
-                  { fontSize: heroTitleSize, lineHeight: heroTitleSize * 0.98 },
-                ]}
-              >
-                Michael
-              </Text>
-              <Text
-                style={[
-                  s.heroSub,
-                  { fontSize: heroTitleSize, lineHeight: heroTitleSize * 1.1 },
-                ]}
-              >
-                By Christian
-              </Text>
-              <Text
-                style={[
-                  s.heroTagline,
-                  isPhone && { fontSize: 13, maxWidth: "100%" },
-                ]}
-              >
-                Where artisan craft meets immutable provenance.{"\n"}Every
-                stitch signed on-chain.
-              </Text>
-              <View style={[s.ctaRow, isPhone && { marginTop: 20 }]}>
-                <TouchableOpacity
+              <View style={[s.heroInner, { paddingHorizontal: sidePad }]}>
+                <Text
                   style={[
-                    s.btnWhite,
-                    isPhone && { paddingHorizontal: 20, paddingVertical: 12 },
+                    s.heroEye,
+                    isPhone && { fontSize: 8, letterSpacing: 2 },
                   ]}
-                  onPress={() => router.push("/collection")}
-                  activeOpacity={0.85}
                 >
-                  <Text style={[s.btnWhiteTxt, isPhone && { fontSize: 9 }]}>
-                    Browse & Buy
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+                  Phygital · Luxury Fashion · Stellar · Est. 2026
+                </Text>
+
+                <Text
                   style={[
-                    s.btnGhost,
-                    isPhone && { paddingHorizontal: 20, paddingVertical: 12 },
+                    s.heroTitle,
+                    {
+                      fontSize: heroTitleSize,
+                      lineHeight: heroTitleSize * 0.98,
+                    },
                   ]}
-                  onPress={() => router.push("/profile")}
-                  activeOpacity={0.85}
                 >
-                  <Text style={[s.btnGhostTxt, isPhone && { fontSize: 9 }]}>
-                    My Pieces
-                  </Text>
-                </TouchableOpacity>
+                  Michael
+                </Text>
+
+                <Text
+                  style={[
+                    s.heroSub,
+                    {
+                      fontSize: heroTitleSize,
+                      lineHeight: heroTitleSize * 1.1,
+                    },
+                  ]}
+                >
+                  By Christian
+                </Text>
+
+                <Text
+                  style={[
+                    s.heroTagline,
+                    isPhone && { fontSize: 13, maxWidth: "100%" },
+                  ]}
+                >
+                  Where artisan craft meets immutable provenance.{"\n"}Every
+                  stitch signed on-chain.
+                </Text>
+
+                <View style={[s.ctaRow, isPhone && { marginTop: 20 }]}>
+                  <TouchableOpacity
+                    style={[
+                      s.btnWhite,
+                      isPhone && { paddingHorizontal: 20, paddingVertical: 12 },
+                    ]}
+                    onPress={() => router.push("/collection")}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[s.btnWhiteTxt, isPhone && { fontSize: 9 }]}>
+                      Browse & Buy
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      s.btnGhost,
+                      isPhone && { paddingHorizontal: 20, paddingVertical: 12 },
+                    ]}
+                    onPress={() => router.push("/profile")}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[s.btnGhostTxt, isPhone && { fontSize: 9 }]}>
+                      My Pieces
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={[s.chips, isPhone && { marginTop: 12 }]}>
+                  {[
+                    "💳 Card",
+                    "🍎 Apple Pay",
+                    "G Google Pay",
+                    "👜 No Wallet",
+                  ].map((p) => (
+                    <View key={p} style={s.chip}>
+                      <Text style={s.chipTxt}>{p}</Text>
+                    </View>
+                  ))}
+                </View>
               </View>
-              <View style={[s.chips, isPhone && { marginTop: 12 }]}>
-                {[
-                  "💳 Card",
-                  "🍎 Apple Pay",
-                  "G Google Pay",
-                  "👜 No Wallet",
-                ].map((p) => (
-                  <View key={p} style={s.chip}>
-                    <Text style={s.chipTxt}>{p}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          </Animated.View>
-        </ImageBackground>
+            </Animated.View>
+          </View>
+        </View>
 
         {/* ── TICKER ── */}
         <MarqueeTicker />
@@ -789,7 +823,56 @@ const s = StyleSheet.create({
     color: C.cream,
   },
 
-  hero: { justifyContent: "flex-end", overflow: "hidden" },
+  hero: {
+    width: "100%",
+    justifyContent: "flex-end",
+    overflow: "hidden",
+    backgroundColor: C.black,
+  },
+
+  heroSection: {
+    width: "100%",
+    backgroundColor: C.black,
+    overflow: "hidden",
+  },
+
+  heroFrame: {
+    width: "100%",
+    position: "relative",
+    justifyContent: "flex-end",
+    overflow: "hidden",
+    backgroundColor: C.black,
+  },
+
+  heroMedia: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    overflow: "hidden",
+  },
+
+  heroVideo: {
+    width: "100%",
+    height: "100%",
+  },
+
+  heroOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  },
+
+  heroTextBlock: {
+    maxWidth: 420,
+  },
+
+  heroTextBlockWide: {
+    marginLeft: 80,
+  },
   heroContent: { paddingBottom: 44 },
   heroInner: {},
   heroEye: {
