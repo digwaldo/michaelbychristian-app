@@ -29,6 +29,7 @@ const useClientLayout = () => {
     isTablet: false,
     isWeb: false,
   });
+
   useEffect(() => {
     const update = () => {
       const d = Dimensions.get("window");
@@ -40,20 +41,22 @@ const useClientLayout = () => {
         isWeb: Platform.OS === "web" && d.width >= 900,
       });
     };
+
     update();
     const sub = Dimensions.addEventListener("change", update);
     return () => sub?.remove();
   }, []);
+
   return layout;
 };
 
 // ── Stellar direct reads ───────────────────────────────────────
 async function callContract(fn: string, args: any[] = []): Promise<any> {
   const Sdk = await import("@stellar/stellar-sdk" as any);
-  //TODO: create server + contract instances
+
   const server = new Sdk.rpc.Server(RPC_URL);
   const contract = new Sdk.Contract(CONTRACT);
-  //TODO: create dummy account
+
   const keypair = Sdk.Keypair.random();
   const account = new Sdk.Account(keypair.publicKey(), "0");
 
@@ -64,10 +67,12 @@ async function callContract(fn: string, args: any[] = []): Promise<any> {
     .addOperation(contract.call(fn, ...args))
     .setTimeout(30)
     .build();
-  //Readonly contract interaction
+
   const sim = await server.simulateTransaction(tx);
-  if (!Sdk.rpc.Api.isSimulationSuccess(sim))
+  if (!Sdk.rpc.Api.isSimulationSuccess(sim)) {
     throw new Error("Simulation failed");
+  }
+
   return Sdk.scValToNative(sim.result.retval);
 }
 
@@ -75,11 +80,12 @@ async function callContract(fn: string, args: any[] = []): Promise<any> {
 // Tokens owned by ANY other address are sold
 const ADMIN_WALLET = "GB2GKZ22XFF5BZWRV6AIO7JLCDT7W36Y5DFIUWPENA5IIDEAH7FLXOA3";
 
-//normalize image URLs
+// normalize image URLs
 function resolveImg(img: string | undefined): string | null {
   if (!img) return null;
-  if (img.startsWith("ipfs://"))
+  if (img.startsWith("ipfs://")) {
     return img.replace("ipfs://", "https://ipfs.io/ipfs/");
+  }
   return img;
 }
 
@@ -92,29 +98,104 @@ interface NFTItem {
   listed: boolean;
   sold: boolean;
   owner: string | null;
+
   silhouette: string;
   model: string;
   edition_type: string;
-  primary_texture: string;
-  hardware: string;
-  nfc_chip_id: string;
-  collection: string;
-  trait_rarity: string;
+
   primary_color: string;
   secondary_color: string;
+
+  primary_texture: string;
+  secondary_texture: string;
+  textured_pattern: string;
+
+  hardware: string;
+  interior_lining: string;
+  authentication: string;
+
+  nfc_chip_id: string;
+  collection: string;
+  collaboration: string;
+  trait_rarity: string;
+  design_status: string;
+  archive_status: string;
+  tailored_year: string;
+  design_year: string;
 }
 
 type SortKey = "price_asc" | "price_desc" | "newest" | "name_asc";
+
 interface Filters {
   silhouette: string[];
-  edition: string[];
+  model: string[];
+  edition_type: string[];
   status: string[];
   price: string[];
+  primary_color: string[];
+  secondary_color: string[];
+  primary_texture: string[];
+  secondary_texture: string[];
+  textured_pattern: string[];
+  hardware: string[];
+  interior_lining: string[];
+  authentication: string[];
+  collection: string[];
+  collaboration: string[];
+  trait_rarity: string[];
+  design_status: string[];
+  archive_status: string[];
+  tailored_year: string[];
+  design_year: string[];
 }
+
+const emptyFilters: Filters = {
+  silhouette: [],
+  model: [],
+  edition_type: [],
+  status: [],
+  price: [],
+  primary_color: [],
+  secondary_color: [],
+  primary_texture: [],
+  secondary_texture: [],
+  textured_pattern: [],
+  hardware: [],
+  interior_lining: [],
+  authentication: [],
+  collection: [],
+  collaboration: [],
+  trait_rarity: [],
+  design_status: [],
+  archive_status: [],
+  tailored_year: [],
+  design_year: [],
+};
+
+const traitKeys: (keyof Filters)[] = [
+  "silhouette",
+  "model",
+  "edition_type",
+  "primary_color",
+  "secondary_color",
+  "primary_texture",
+  "secondary_texture",
+  "textured_pattern",
+  "hardware",
+  "interior_lining",
+  "authentication",
+  "collection",
+  "collaboration",
+  "trait_rarity",
+  "design_status",
+  "archive_status",
+  "tailored_year",
+  "design_year",
+];
 
 // ── Component ─────────────────────────────────────────────────
 export default function CollectionScreen() {
-  const { w, isPhone, isWeb } = useClientLayout();
+  const { isPhone, isWeb } = useClientLayout();
 
   const [all, setAll] = useState<NFTItem[]>([]);
   const [displayed, setDisplayed] = useState<NFTItem[]>([]);
@@ -122,12 +203,7 @@ export default function CollectionScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>("newest");
-  const [filters, setFilters] = useState<Filters>({
-    silhouette: [],
-    edition: [],
-    status: [],
-    price: [],
-  });
+  const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [filterOpen, setFilterOpen] = useState(false);
   const [stats, setStats] = useState({ total: 0, listed: 0 });
 
@@ -135,110 +211,134 @@ export default function CollectionScreen() {
   const sidePad = isPhone ? 18 : 24;
   const maxW = isWeb ? 900 : undefined;
   const COLS = isWeb ? 3 : 2;
-  const GAP = 2;
-  // cardW not needed — aspectRatio:1 handles square sizing
 
-  const load = useCallback(async (isRefresh = false) => {
-    if (!isRefresh) setLoading(true);
-    setError(null);
-    try {
-      const Sdk = await import("@stellar/stellar-sdk" as any);
-      const total = Number(await callContract("total_supply"));
-      const items: NFTItem[] = [];
+  const load = useCallback(
+    async (isRefresh = false) => {
+      if (!isRefresh) setLoading(true);
+      setError(null);
 
-      for (let i = 1; i <= total; i++) {
-        try {
-          // Fetch token data and owner simultaneously
-          const [raw, ownerRaw] = await Promise.all([
-            callContract("full_token_data", [
-              Sdk.nativeToScVal(i, { type: "u64" }),
-            ]),
-            callContract("owner_of", [
-              Sdk.nativeToScVal(i, { type: "u64" }),
-            ]).catch(() => null),
-          ]);
+      try {
+        const Sdk = await import("@stellar/stellar-sdk" as any);
+        const total = Number(await callContract("total_supply"));
+        const items: NFTItem[] = [];
 
-          console.log(`TOKEN ${i}`, raw);
-          console.log(
-            `TOKEN ${i} KEYS`,
-            raw && typeof raw === "object" ? Object.keys(raw) : null,
-          );
+        for (let i = 1; i <= total; i++) {
+          try {
+            const [raw, ownerRaw] = await Promise.all([
+              callContract("full_token_data", [
+                Sdk.nativeToScVal(i, { type: "u64" }),
+              ]),
+              callContract("owner_of", [
+                Sdk.nativeToScVal(i, { type: "u64" }),
+              ]).catch(() => null),
+            ]);
 
-          const t = raw.traits || {};
+            const t = raw?.traits || {};
 
-          // A token is SOLD if its owner is NOT the admin wallet
-          // Even if listed:true in contract data, ownership tells the real story
-          const owner = ownerRaw ? String(ownerRaw).trim() : null;
-          const ownedByAdmin =
-            !owner || owner.toUpperCase() === ADMIN_WALLET.toUpperCase();
-          const isSold = !ownedByAdmin;
-          // listed = contract says listed AND admin still owns it
-          const isListed = raw.listed !== false && ownedByAdmin;
+            const owner = ownerRaw ? String(ownerRaw).trim() : null;
+            const ownedByAdmin =
+              !owner || owner.toUpperCase() === ADMIN_WALLET.toUpperCase();
+            const isSold = !ownedByAdmin;
+            const isListed = raw?.listed !== false && ownedByAdmin;
 
-          items.push({
-            tokenId: i,
-            name: raw.name || `MBC Token #${i}`,
-            image: resolveImg(raw.image),
-            price_usdc: raw.price_usdc ? Number(raw.price_usdc) : 0,
-            listed: isListed,
-            sold: isSold,
-            owner: owner,
-            silhouette: t.silhouette || raw.silhouette || "",
-            model: t.model || raw.model || "",
-            edition_type: t.edition_type || raw.edition_type || "",
-            primary_texture: t.primary_texture || raw.primary_texture || "",
-            hardware: t.hardware || raw.hardware || "",
-            nfc_chip_id: t.nfc_chip_id || raw.nfc_chip_id || "",
-            collection: t.collection || raw.collection || "",
-            trait_rarity: t.trait_rarity || raw.trait_rarity || "",
-            primary_color: t.primary_color || raw.primary_color || "",
-            secondary_color: t.secondary_color || raw.secondary_color || "",
-          });
-        } catch {
-          /* skip failed tokens */
+            items.push({
+              tokenId: i,
+              name: raw?.name || `MBC Token #${i}`,
+              image: resolveImg(raw?.image),
+              price_usdc: raw?.price_usdc ? Number(raw.price_usdc) : 0,
+              listed: isListed,
+              sold: isSold,
+              owner,
+
+              silhouette: t.silhouette || raw?.silhouette || "",
+              model: t.model || raw?.model || "",
+              edition_type: t.edition_type || raw?.edition_type || "",
+
+              primary_color: t.primary_color || raw?.primary_color || "",
+              secondary_color: t.secondary_color || raw?.secondary_color || "",
+
+              primary_texture: t.primary_texture || raw?.primary_texture || "",
+              secondary_texture:
+                t.secondary_texture || raw?.secondary_texture || "",
+              textured_pattern:
+                t.textured_pattern || raw?.textured_pattern || "",
+
+              hardware: t.hardware || raw?.hardware || "",
+              interior_lining: t.interior_lining || raw?.interior_lining || "",
+              authentication: t.authentication || raw?.authentication || "",
+
+              nfc_chip_id: t.nfc_chip_id || raw?.nfc_chip_id || "",
+              collection: t.collection || raw?.collection || "",
+              collaboration: t.collaboration || raw?.collaboration || "",
+              trait_rarity: t.trait_rarity || raw?.trait_rarity || "",
+              design_status: t.design_status || raw?.design_status || "",
+              archive_status: t.archive_status || raw?.archive_status || "",
+              tailored_year: t.tailored_year || raw?.tailored_year || "",
+              design_year: t.design_year || raw?.design_year || "",
+            });
+          } catch {
+            // skip failed tokens
+          }
         }
-      }
 
-      setAll(items);
-      setStats({
-        total: items.length,
-        listed: items.filter((n) => n.listed && !n.sold).length,
-      });
-      applyAll(items, filters, sort);
-    } catch (e: any) {
-      setError(e.message || "Could not connect to Stellar");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+        setAll(items);
+        setStats({
+          total: items.length,
+          listed: items.filter((n) => n.listed && !n.sold).length,
+        });
+        applyAll(items, filters, sort);
+      } catch (e: any) {
+        setError(e.message || "Could not connect to Stellar");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [filters, sort],
+  );
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   function applyAll(items: NFTItem[], f: Filters, s: SortKey) {
     let r = [...items];
-    if (f.silhouette.length)
-      r = r.filter((n) => f.silhouette.includes(n.silhouette));
-    if (f.edition.length)
-      r = r.filter((n) => f.edition.includes(n.edition_type));
-    if (f.status.includes("listed") && !f.status.includes("unlisted"))
-      r = r.filter((n) => !n.sold);
-    if (f.status.includes("unlisted") && !f.status.includes("listed"))
-      r = r.filter((n) => n.sold);
-    if (f.price.includes("under200"))
-      r = r.filter((n) => n.price_usdc / 100 < 200);
-    if (f.price.includes("200to300"))
-      r = r.filter(
-        (n) => n.price_usdc / 100 >= 200 && n.price_usdc / 100 <= 300,
-      );
-    if (f.price.includes("300plus"))
-      r = r.filter((n) => n.price_usdc / 100 > 300);
+
+    for (const key of traitKeys) {
+      if (f[key].length) {
+        r = r.filter((n) => {
+          const value = n[key as keyof NFTItem];
+          return typeof value === "string" && f[key].includes(value);
+        });
+      }
+    }
+
+    if (f.status.includes("listed") && !f.status.includes("unlisted")) {
+      r = r.filter((n) => n.listed === true);
+    }
+
+    if (f.status.includes("unlisted") && !f.status.includes("listed")) {
+      r = r.filter((n) => n.listed !== true);
+    }
+
+    if (f.price.length) {
+      r = r.filter((n) => {
+        const price = n.price_usdc / 100;
+
+        return f.price.some((bucket) => {
+          if (bucket === "under200") return price < 200;
+          if (bucket === "200to300") return price >= 200 && price <= 300;
+          if (bucket === "300plus") return price > 300;
+          return false;
+        });
+      });
+    }
+
     if (s === "price_asc") r.sort((a, b) => a.price_usdc - b.price_usdc);
     if (s === "price_desc") r.sort((a, b) => b.price_usdc - a.price_usdc);
     if (s === "name_asc") r.sort((a, b) => a.name.localeCompare(b.name));
     if (s === "newest") r.sort((a, b) => b.tokenId - a.tokenId);
+
     setDisplayed(r);
   }
 
@@ -246,28 +346,73 @@ export default function CollectionScreen() {
     const next = filters[key].includes(val)
       ? filters[key].filter((v) => v !== val)
       : [...filters[key], val];
+
     const f = { ...filters, [key]: next };
     setFilters(f);
     applyAll(all, f, sort);
   }
 
   function clearFilters() {
-    const f: Filters = { silhouette: [], edition: [], status: [], price: [] };
-    setFilters(f);
-    applyAll(all, f, sort);
+    setFilters(emptyFilters);
+    applyAll(all, emptyFilters, sort);
   }
 
-  function changeSort(s: SortKey) {
-    setSort(s);
-    applyAll(all, filters, s);
+  function changeSort(nextSort: SortKey) {
+    setSort(nextSort);
+    applyAll(all, filters, nextSort);
+  }
+
+  function getOptions(key: keyof NFTItem): string[] {
+    return [
+      ...new Set(all.map((n) => n[key]).filter(Boolean) as string[]),
+    ].sort();
   }
 
   const formatPrice = (p: number) => (p ? `$${(p / 100).toFixed(0)}` : "—");
   const activeCount = Object.values(filters).flat().length;
-  const silhouettes = [
-    ...new Set(all.map((n) => n.silhouette).filter(Boolean)),
-  ];
-  const editions = [...new Set(all.map((n) => n.edition_type).filter(Boolean))];
+
+  const silhouettes = getOptions("silhouette");
+  const models = getOptions("model");
+  const editions = getOptions("edition_type");
+  const primaryColors = getOptions("primary_color");
+  const secondaryColors = getOptions("secondary_color");
+  const primaryTextures = getOptions("primary_texture");
+  const secondaryTextures = getOptions("secondary_texture");
+  const texturedPatterns = getOptions("textured_pattern");
+  const hardwareOptions = getOptions("hardware");
+  const interiorLiningOptions = getOptions("interior_lining");
+  const authenticationOptions = getOptions("authentication");
+  const collectionOptions = getOptions("collection");
+  const collaborationOptions = getOptions("collaboration");
+  const rarityOptions = getOptions("trait_rarity");
+  const designStatusOptions = getOptions("design_status");
+  const archiveStatusOptions = getOptions("archive_status");
+  const tailoredYearOptions = getOptions("tailored_year");
+  const designYearOptions = getOptions("design_year");
+
+  function renderTraitSection(
+    title: string,
+    values: string[],
+    filterKey: keyof Filters,
+  ) {
+    if (!values.length) return null;
+
+    return (
+      <View style={s.filterSection}>
+        <Text style={s.filterSectionLbl}>{title}</Text>
+        <View style={s.chips}>
+          {values.map((v) => (
+            <Chip
+              key={`${filterKey}-${v}`}
+              label={v}
+              active={filters[filterKey].includes(v)}
+              onPress={() => toggleFilter(filterKey, v)}
+            />
+          ))}
+        </View>
+      </View>
+    );
+  }
 
   // ── Card — same aesthetic as home bag cards ────────────────
   function renderCard({ item }: { item: NFTItem }) {
@@ -277,6 +422,7 @@ export default function CollectionScreen() {
       .join("")
       .substring(0, 2)
       .toUpperCase();
+
     return (
       <TouchableOpacity
         style={s.card}
@@ -285,7 +431,6 @@ export default function CollectionScreen() {
         }
         activeOpacity={0.88}
       >
-        {/* Image — square via aspectRatio, same as bagImgWrap in index */}
         <View style={s.cardImg}>
           {item.image ? (
             <Image
@@ -296,35 +441,31 @@ export default function CollectionScreen() {
           ) : (
             <Text style={s.cardInit}>{init}</Text>
           )}
+
           <View style={s.imgOverlay} />
 
-          {/* Token # — top left always */}
           <View style={s.tokenBadge}>
             <Text style={s.tokenBadgeTxt}>#{item.tokenId}</Text>
           </View>
 
-          {/* Edition type — top right, available items only */}
           {!item.sold && item.edition_type ? (
             <View style={s.editionBadge}>
               <Text style={s.editionBadgeTxt}>{item.edition_type}</Text>
             </View>
           ) : null}
 
-          {/* Listed — bottom left, green, available items */}
           {!item.sold ? (
             <View style={s.listedBadge}>
               <Text style={s.listedBadgeTxt}>✦ Listed</Text>
             </View>
           ) : null}
 
-          {/* Sold — bottom left, red, sold items */}
           {item.sold ? (
             <View style={s.soldBadge}>
               <Text style={s.soldBadgeTxt}>Sold · Make Offer</Text>
             </View>
           ) : null}
 
-          {/* NFC — bottom right */}
           {item.nfc_chip_id ? (
             <View style={s.nfcBadge}>
               <Text style={s.nfcBadgeTxt}>✦ NFC</Text>
@@ -332,7 +473,6 @@ export default function CollectionScreen() {
           ) : null}
         </View>
 
-        {/* Body — same padding as bagCardBody */}
         <View style={s.cardBody}>
           <Text style={s.cardSilhouette} numberOfLines={1}>
             {item.silhouette || "MBC"}
@@ -347,12 +487,12 @@ export default function CollectionScreen() {
           </Text>
         </View>
 
-        {/* Footer */}
         <View style={s.cardFoot}>
           <View>
             <Text style={s.cardPrice}>{formatPrice(item.price_usdc)}</Text>
             <Text style={s.cardCurrency}>USDC</Text>
           </View>
+
           {!item.sold ? (
             <TouchableOpacity
               style={s.buyBtn}
@@ -407,7 +547,6 @@ export default function CollectionScreen() {
 
   return (
     <View style={s.root}>
-      {/* ── NAV — identical structure to index.tsx ── */}
       <SafeAreaView edges={["top"]} style={s.navSafe}>
         <View style={[s.nav, { paddingHorizontal: sidePad }]}>
           <View
@@ -428,6 +567,7 @@ export default function CollectionScreen() {
                 The <Text style={s.navTitleEm}>Collection</Text>
               </Text>
             </View>
+
             <TouchableOpacity
               onPress={() => router.back()}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -437,9 +577,8 @@ export default function CollectionScreen() {
           </View>
         </View>
 
-        {/* Stats bar — same style as index stats */}
         {!loading && !error && (
-          <View style={[s.statsBar, maxW ? {} : {}]}>
+          <View style={s.statsBar}>
             {[
               { v: String(stats.total), l: "Total Minted" },
               { v: String(stats.listed), l: "Listed" },
@@ -454,7 +593,6 @@ export default function CollectionScreen() {
           </View>
         )}
 
-        {/* Toolbar */}
         {!loading && !error && (
           <View style={[s.toolbar, { paddingHorizontal: sidePad }]}>
             <Text style={s.toolCount}>
@@ -463,6 +601,7 @@ export default function CollectionScreen() {
               </Text>{" "}
               pieces
             </Text>
+
             <View style={s.toolRight}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {(
@@ -484,6 +623,7 @@ export default function CollectionScreen() {
                   </TouchableOpacity>
                 ))}
               </ScrollView>
+
               <TouchableOpacity
                 style={[s.filterBtn, activeCount > 0 && s.filterBtnOn]}
                 onPress={() => setFilterOpen(true)}
@@ -502,7 +642,6 @@ export default function CollectionScreen() {
         )}
       </SafeAreaView>
 
-      {/* ── Loading ── */}
       {loading && (
         <View style={s.center}>
           <ActivityIndicator color={C.gold} size="large" />
@@ -511,7 +650,6 @@ export default function CollectionScreen() {
         </View>
       )}
 
-      {/* ── Error ── */}
       {!!error && (
         <View style={s.center}>
           <Text style={s.errTitle}>Could not load collection</Text>
@@ -522,7 +660,6 @@ export default function CollectionScreen() {
         </View>
       )}
 
-      {/* ── Empty ── */}
       {!loading && !error && displayed.length === 0 && (
         <View style={s.center}>
           <Text style={s.errTitle}>
@@ -538,7 +675,6 @@ export default function CollectionScreen() {
         </View>
       )}
 
-      {/* ── Grid — same structure as home bag grid ── */}
       {!loading && !error && displayed.length > 0 && (
         <FlatList
           data={displayed}
@@ -573,7 +709,6 @@ export default function CollectionScreen() {
         />
       )}
 
-      {/* ── Filter Modal ── */}
       <Modal
         visible={filterOpen}
         animationType="slide"
@@ -582,6 +717,7 @@ export default function CollectionScreen() {
       >
         <View style={s.filterModal}>
           <View style={s.filterHandle} />
+
           <SafeAreaView edges={["top"]}>
             <View style={s.filterHead}>
               <Text style={s.filterTitle}>Filter Pieces</Text>
@@ -590,38 +726,11 @@ export default function CollectionScreen() {
               </TouchableOpacity>
             </View>
           </SafeAreaView>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {silhouettes.length > 0 && (
-              <View style={s.filterSection}>
-                <Text style={s.filterSectionLbl}>Silhouette</Text>
-                <View style={s.chips}>
-                  {silhouettes.map((v) => (
-                    <Chip
-                      key={v}
-                      label={v}
-                      active={filters.silhouette.includes(v)}
-                      onPress={() => toggleFilter("silhouette", v)}
-                    />
-                  ))}
-                </View>
-              </View>
-            )}
 
-            {editions.length > 0 && (
-              <View style={s.filterSection}>
-                <Text style={s.filterSectionLbl}>Edition Type</Text>
-                <View style={s.chips}>
-                  {editions.map((v) => (
-                    <Chip
-                      key={v}
-                      label={v}
-                      active={filters.edition.includes(v)}
-                      onPress={() => toggleFilter("edition", v)}
-                    />
-                  ))}
-                </View>
-              </View>
-            )}
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {renderTraitSection("Silhouette", silhouettes, "silhouette")}
+            {renderTraitSection("Model", models, "model")}
+            {renderTraitSection("Edition Type", editions, "edition_type")}
 
             <View style={s.filterSection}>
               <Text style={s.filterSectionLbl}>Status</Text>
@@ -660,6 +769,70 @@ export default function CollectionScreen() {
               </View>
             </View>
 
+            {renderTraitSection(
+              "Primary Color",
+              primaryColors,
+              "primary_color",
+            )}
+            {renderTraitSection(
+              "Secondary Color",
+              secondaryColors,
+              "secondary_color",
+            )}
+            {renderTraitSection(
+              "Primary Texture",
+              primaryTextures,
+              "primary_texture",
+            )}
+            {renderTraitSection(
+              "Secondary Texture",
+              secondaryTextures,
+              "secondary_texture",
+            )}
+            {renderTraitSection(
+              "Textured Pattern",
+              texturedPatterns,
+              "textured_pattern",
+            )}
+            {renderTraitSection("Hardware", hardwareOptions, "hardware")}
+            {renderTraitSection(
+              "Interior Lining",
+              interiorLiningOptions,
+              "interior_lining",
+            )}
+            {renderTraitSection(
+              "Authentication",
+              authenticationOptions,
+              "authentication",
+            )}
+            {renderTraitSection("Collection", collectionOptions, "collection")}
+            {renderTraitSection(
+              "Collaboration",
+              collaborationOptions,
+              "collaboration",
+            )}
+            {renderTraitSection("Trait Rarity", rarityOptions, "trait_rarity")}
+            {renderTraitSection(
+              "Design Status",
+              designStatusOptions,
+              "design_status",
+            )}
+            {renderTraitSection(
+              "Archive Status",
+              archiveStatusOptions,
+              "archive_status",
+            )}
+            {renderTraitSection(
+              "Tailored Year",
+              tailoredYearOptions,
+              "tailored_year",
+            )}
+            {renderTraitSection(
+              "Design Year",
+              designYearOptions,
+              "design_year",
+            )}
+
             {activeCount > 0 && (
               <TouchableOpacity
                 style={s.clearBtn}
@@ -671,6 +844,7 @@ export default function CollectionScreen() {
                 <Text style={s.clearBtnTxt}>✕ Clear All Filters</Text>
               </TouchableOpacity>
             )}
+
             <View style={{ height: 40 }} />
           </ScrollView>
         </View>
@@ -681,10 +855,10 @@ export default function CollectionScreen() {
 
 // ── Styles — mirrors index.tsx conventions exactly ────────────
 const GAP = 2;
+
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.black },
 
-  // Nav — same as index
   navSafe: {
     backgroundColor: C.charcoal,
     borderBottomWidth: 1,
@@ -712,7 +886,6 @@ const s = StyleSheet.create({
   navTitleEm: { fontStyle: "italic", fontWeight: "400", color: C.goldLt },
   navBack: { fontSize: 11, color: C.muted, letterSpacing: 0.5 },
 
-  // Stats bar — same as index statRow style but horizontal
   statsBar: {
     flexDirection: "row",
     borderTopWidth: 1,
@@ -739,7 +912,6 @@ const s = StyleSheet.create({
     marginTop: 2,
   },
 
-  // Toolbar
   toolbar: {
     flexDirection: "row",
     alignItems: "center",
@@ -779,7 +951,6 @@ const s = StyleSheet.create({
     color: C.muted,
   },
 
-  // Center states
   center: {
     flex: 1,
     alignItems: "center",
@@ -821,11 +992,9 @@ const s = StyleSheet.create({
     color: C.gold,
   },
 
-  // Grid — same GAP as home bag grid
   grid: { padding: GAP, paddingBottom: 32 },
   row: { gap: GAP, marginBottom: GAP },
 
-  // Card — same structure as home bag cards
   card: {
     flex: 1,
     backgroundColor: C.charcoal,
@@ -851,7 +1020,6 @@ const s = StyleSheet.create({
     color: "rgba(184,150,62,0.1)",
   },
 
-  // Token # — top left, always shown
   tokenBadge: {
     position: "absolute",
     top: 8,
@@ -884,7 +1052,6 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.goldLt,
   },
-  // Listed — bottom left, green
   listedBadge: {
     position: "absolute",
     bottom: 8,
@@ -902,7 +1069,6 @@ const s = StyleSheet.create({
     color: C.green,
     fontWeight: "600",
   },
-  // Sold — bottom left, red
   soldBadge: {
     position: "absolute",
     bottom: 8,
@@ -920,7 +1086,6 @@ const s = StyleSheet.create({
     color: C.red,
     fontWeight: "600",
   },
-  // NFC — bottom right
   nfcBadge: {
     position: "absolute",
     bottom: 8,
@@ -938,7 +1103,6 @@ const s = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // Card body — same padding/sizes as bagCardBody in index
   cardBody: { padding: 10 },
   cardSilhouette: {
     fontSize: 7,
@@ -957,7 +1121,6 @@ const s = StyleSheet.create({
   },
   cardSub: { fontSize: 9, color: C.muted, letterSpacing: 0.5 },
 
-  // Card footer
   cardFoot: {
     flexDirection: "row",
     alignItems: "center",
@@ -1008,7 +1171,6 @@ const s = StyleSheet.create({
     color: C.red,
   },
 
-  // Filter modal
   filterModal: { flex: 1, backgroundColor: C.black },
   filterHandle: {
     width: 40,
