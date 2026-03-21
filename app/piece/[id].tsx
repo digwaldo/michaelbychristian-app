@@ -1,6 +1,6 @@
-// app/piece/[id].tsx — NFT Detail + Direct Stripe Checkout
-// Reads token data directly from Stellar contract
-// Calls /api/create-checkout directly — same as the HTML buyNFT() function
+// app/piece/[id].tsx — Bag Detail + Stripe Checkout
+// Reads bag data directly from Stellar contract (client-side, same as collection.tsx)
+// Purchase goes through /api/create-checkout — server verifies ownership, then Stripe charges
 
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -14,23 +14,17 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import {
-  BACKEND,
-  C,
-  CONTRACT,
-  EXPLORER,
-  PASSPHRASE,
-  RPC_URL,
-} from "../../lib/theme";
+import { BACKEND, C, CONTRACT, PASSPHRASE, RPC_URL } from "../../lib/theme";
 
 const { width } = Dimensions.get("window");
 const IS_WEB = Platform.OS === "web";
 const MAX_W = IS_WEB ? 760 : undefined;
 
-// ── Direct Stellar read ───────────────────────────────────────
+// ── Read bag data from Stellar contract (client-side) ─────────
+// Same pattern as collection.tsx — no wallet needed, just simulates read calls
 async function loadTokenFromStellar(tokenId: number) {
   const Sdk = await import("@stellar/stellar-sdk" as any);
   const server = new Sdk.rpc.Server(RPC_URL);
@@ -52,43 +46,37 @@ async function loadTokenFromStellar(tokenId: number) {
     return Sdk.scValToNative(sim.result.retval);
   }
 
-  const [raw, owner] = await Promise.all([
-    simulate("token_data", [Sdk.nativeToScVal(tokenId, { type: "u64" })]),
-    simulate("owner_of", [Sdk.nativeToScVal(tokenId, { type: "u64" })]).catch(
-      () => null,
-    ),
+  const raw = await simulate("token_data", [
+    Sdk.nativeToScVal(tokenId, { type: "u64" }),
   ]);
 
   const t = raw.traits || {};
   return {
-    data: {
-      name: raw.name || `MBC Token #${tokenId}`,
-      image: raw.image || "",
-      price_usdc: raw.price_usdc ? Number(raw.price_usdc) : 0,
-      listed: raw.listed !== false,
-      silhouette: t.silhouette || raw.silhouette || "",
-      model: t.model || raw.model || "",
-      edition_type: t.edition_type || raw.edition_type || "",
-      primary_color: t.primary_color || raw.primary_color || "",
-      secondary_color: t.secondary_color || raw.secondary_color || "",
-      primary_texture: t.primary_texture || raw.primary_texture || "",
-      secondary_texture: t.secondary_texture || raw.secondary_texture || "",
-      textured_pattern: t.textured_pattern || raw.textured_pattern || "",
-      hardware: t.hardware || raw.hardware || "",
-      interior_lining: t.interior_lining || raw.interior_lining || "",
-      dimensions: t.dimensions || raw.dimensions || "",
-      authentication: t.authentication || raw.authentication || "",
-      serial_number: t.serial_number || raw.serial_number || "",
-      nfc_chip_id: t.nfc_chip_id || raw.nfc_chip_id || "",
-      collection: t.collection || raw.collection || "",
-      collaboration: t.collaboration || raw.collaboration || "",
-      trait_rarity: t.trait_rarity || raw.trait_rarity || "",
-      design_status: t.design_status || raw.design_status || "",
-      archive_status: t.archive_status || raw.archive_status || "",
-      tailored_year: Number(t.tailored_year || raw.tailored_year || 0),
-      design_year: Number(t.design_year || raw.design_year || 0),
-    },
-    owner: owner || null,
+    name: raw.name || `MBC Token #${tokenId}`,
+    image: raw.image || "",
+    price_usdc: raw.price_usdc ? Number(raw.price_usdc) : 0,
+    listed: raw.listed !== false,
+    silhouette: t.silhouette || raw.silhouette || "",
+    model: t.model || raw.model || "",
+    edition_type: t.edition_type || raw.edition_type || "",
+    primary_color: t.primary_color || raw.primary_color || "",
+    secondary_color: t.secondary_color || raw.secondary_color || "",
+    primary_texture: t.primary_texture || raw.primary_texture || "",
+    secondary_texture: t.secondary_texture || raw.secondary_texture || "",
+    textured_pattern: t.textured_pattern || raw.textured_pattern || "",
+    hardware: t.hardware || raw.hardware || "",
+    interior_lining: t.interior_lining || raw.interior_lining || "",
+    dimensions: t.dimensions || raw.dimensions || "",
+    authentication: t.authentication || raw.authentication || "",
+    serial_number: t.serial_number || raw.serial_number || "",
+    nfc_chip_id: t.nfc_chip_id || raw.nfc_chip_id || "",
+    collection: t.collection || raw.collection || "",
+    collaboration: t.collaboration || raw.collaboration || "",
+    trait_rarity: t.trait_rarity || raw.trait_rarity || "",
+    design_status: t.design_status || raw.design_status || "",
+    archive_status: t.archive_status || raw.archive_status || "",
+    tailored_year: Number(t.tailored_year || raw.tailored_year || 0),
+    design_year: Number(t.design_year || raw.design_year || 0),
   };
 }
 
@@ -131,7 +119,6 @@ export default function PieceScreen() {
   const tokenId = Number(id);
 
   const [data, setData] = useState<any | null>(null);
-  const [owner, setOwner] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imgErr, setImgErr] = useState(false);
@@ -148,9 +135,8 @@ export default function PieceScreen() {
     setLoading(true);
     setError(null);
     try {
-      const res = await loadTokenFromStellar(tokenId);
-      setData(res.data);
-      setOwner(res.owner);
+      const bagData = await loadTokenFromStellar(tokenId);
+      setData(bagData);
       Animated.timing(fadeIn, {
         toValue: 1,
         duration: 400,
@@ -163,7 +149,7 @@ export default function PieceScreen() {
     }
   }
 
-  // ── Buy — mirrors the HTML buyNFT() exactly ───────────────
+  // ── Buy — hits /api/create-checkout, server re-checks ownership on Stellar
   async function buyNFT() {
     setBuyStep("checking");
     setBuyError("");
@@ -173,10 +159,9 @@ export default function PieceScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tokenId: String(tokenId),
-          buyerWallet: "",
           successUrl: IS_WEB
-            ? `${window.location.origin}/success.html`
-            : `${BACKEND}/success.html`,
+            ? `${window.location.origin}/success`
+            : `${BACKEND}/success`,
           cancelUrl: IS_WEB ? window.location.href : `${BACKEND}/`,
         }),
       });
@@ -186,10 +171,8 @@ export default function PieceScreen() {
       if (data.url) {
         setBuyStep("redirecting");
         if (IS_WEB) {
-          // Web — redirect directly like the HTML version
           window.location.href = data.url;
         } else {
-          // Native — open Stripe in browser
           await Linking.openURL(data.url);
           setBuyStep("idle");
         }
@@ -218,7 +201,6 @@ export default function PieceScreen() {
     .join("")
     .substring(0, 2)
     .toUpperCase();
-  const short = (a: string) => (a ? `${a.slice(0, 8)}...${a.slice(-6)}` : "—");
 
   const buyLabel = {
     idle: `Purchase This Piece  —  ${price}`,
@@ -261,7 +243,7 @@ export default function PieceScreen() {
 
   return (
     <View style={s.root}>
-      {/* ── Top bar — same as collection nav ── */}
+      {/* ── Top bar ── */}
       <SafeAreaView edges={["top"]} style={s.topBar}>
         <View
           style={[
@@ -379,7 +361,7 @@ export default function PieceScreen() {
               ))}
           </View>
 
-          {/* ── BUY BUTTON — main CTA ── */}
+          {/* ── BUY BUTTON ── */}
           {data.listed ? (
             <>
               <TouchableOpacity
@@ -404,7 +386,6 @@ export default function PieceScreen() {
                 )}
               </TouchableOpacity>
 
-              {/* Error / unavailable message */}
               {(buyStep === "error" || buyStep === "unavailable") && (
                 <View
                   style={[
@@ -430,7 +411,7 @@ export default function PieceScreen() {
 
               <Text style={s.buyNote}>
                 💳 Card · 🍎 Apple Pay · G Google Pay{"\n"}
-                No wallet needed · NFT delivered instantly on-chain
+                Secure checkout powered by Stripe
               </Text>
             </>
           ) : (
@@ -456,51 +437,11 @@ export default function PieceScreen() {
             })}
           </View>
 
-          <View style={s.rule} />
-
-          {/* ── Blockchain proof ── */}
-          <Text style={s.sectionLbl}>On-Chain Proof</Text>
-          <View style={s.chainBox}>
-            {[
-              { k: "Contract", v: short(CONTRACT), mono: true },
-              { k: "Token ID", v: `#${tokenId}`, gold: true },
-              { k: "Standard", v: "Soroban NFT", mono: false },
-              { k: "Network", v: "Stellar · Testnet", gold: true },
-              { k: "Owner", v: owner ? short(owner) : "Checking…", mono: true },
-            ].map(({ k, v, gold, mono }) => (
-              <View key={k} style={s.chainRow}>
-                <Text style={s.chainKey}>{k}</Text>
-                <Text
-                  style={[
-                    s.chainVal,
-                    gold && { color: C.goldLt },
-                    mono && { fontFamily: "monospace" },
-                  ]}
-                >
-                  {v}
-                </Text>
-              </View>
-            ))}
-          </View>
-
-          {/* Explorer link */}
-          <TouchableOpacity
-            style={s.explorerBtn}
-            activeOpacity={0.8}
-            onPress={() => {
-              const url = `${EXPLORER}/contract/${CONTRACT}`;
-              if (IS_WEB) window.open(url, "_blank");
-              else Linking.openURL(url);
-            }}
-          >
-            <Text style={s.explorerBtnTxt}>View on Stellar Explorer ↗</Text>
-          </TouchableOpacity>
-
           <View style={{ height: data.listed ? 100 : 48 }} />
         </View>
       </Animated.ScrollView>
 
-      {/* ── Sticky buy bar — always visible ── */}
+      {/* ── Sticky buy bar ── */}
       {data.listed && (
         <View style={s.stickyBar}>
           <SafeAreaView edges={["bottom"]}>
@@ -588,7 +529,6 @@ const s = StyleSheet.create({
   },
   backLink: { fontSize: 12, color: C.muted },
 
-  // Top bar
   topBar: {
     backgroundColor: C.charcoal,
     borderBottomWidth: 1,
@@ -611,7 +551,6 @@ const s = StyleSheet.create({
     color: C.gold,
   },
 
-  // Image
   imgWrap: {
     width: "100%",
     height: IMG_H,
@@ -700,7 +639,6 @@ const s = StyleSheet.create({
     color: C.red,
   },
 
-  // Content
   content: { backgroundColor: C.black, paddingHorizontal: 24, paddingTop: 28 },
 
   titleRow: {
@@ -753,7 +691,6 @@ const s = StyleSheet.create({
     color: C.muted,
   },
 
-  // Buy button
   buyBtn: {
     backgroundColor: C.gold,
     padding: 18,
@@ -846,44 +783,6 @@ const s = StyleSheet.create({
     fontWeight: "500",
     flex: 1,
     textAlign: "right",
-  },
-
-  chainBox: {
-    borderWidth: 1,
-    borderColor: C.border,
-    overflow: "hidden",
-    backgroundColor: C.charcoal,
-    marginBottom: 16,
-  },
-  chainRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 11,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-  },
-  chainKey: {
-    fontSize: 9,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    color: C.muted,
-  },
-  chainVal: { fontSize: 11, color: C.cream },
-
-  explorerBtn: {
-    borderWidth: 1,
-    borderColor: C.border,
-    padding: 14,
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  explorerBtnTxt: {
-    fontSize: 9,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: C.muted,
   },
 
   stickyBar: {

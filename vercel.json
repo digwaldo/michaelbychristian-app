@@ -3,7 +3,6 @@
   "outputDirectory": "dist",
   "installCommand": "npm install --legacy-peer-deps",
   "framework": null,
-
   "rewrites": [
     {
       "source": "/api/:path*",
@@ -14,7 +13,6 @@
       "destination": "/index.html"
     }
   ],
-
   "headers": [
     {
       "source": "/(.*).(js|css|png|jpg|jpeg|svg|ico|woff|woff2)",

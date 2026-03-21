@@ -17,7 +17,8 @@ export const C = {
   overlay: "rgba(12,11,9,0.92)",
 };
 
-export const BACKEND = "https://michael-by-christian.vercel.app";
+export const BACKEND =
+  process.env.EXPO_PUBLIC_BACKEND_URL ?? "http://localhost:3000";
 export const CONTRACT =
   "CB7GCGWAHWCF3SAJTYCR7JEFINLJBKA3LV7BZNAI46OXYPYZSTFZ6EMB";
 export const RPC_URL = "https://soroban-testnet.stellar.org";
