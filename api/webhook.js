@@ -97,7 +97,7 @@ async function sendConfirmationEmail({
     },
     body: JSON.stringify({
       from: "MBC Michael By Christian <onboarding@resend.dev>",
-      to: [to],
+      to: ["digwaldo@gmail.com"],
       subject: `Order Confirmed — ${pieceName} · MBC`,
       html,
     }),
@@ -161,7 +161,7 @@ module.exports = async (req, res) => {
   if (buyerEmail) {
     try {
       await sendConfirmationEmail({
-        to: buyerEmail,
+        to: "digwaldo@gmail.com",
         buyerName,
         pieceName,
         tokenId,
@@ -185,7 +185,7 @@ module.exports = async (req, res) => {
       },
       body: JSON.stringify({
         from: "MBC Store <onboarding@resend.dev>",
-        to: ["youngcompltd@gmail.com"],
+        to: ["digwaldo@gmail.com"],
         subject: `💰 New Sale — ${pieceName} · ${(amountPaid / 100).toFixed(0)} USD`,
         html: `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#0C0B09;font-family:Helvetica,Arial,sans-serif;">
