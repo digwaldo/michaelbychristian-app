@@ -161,6 +161,9 @@ module.exports = async (req, res) => {
   if (session.payment_status !== "paid")
     return res.status(200).json({ received: true });
 
+  // LOG FULL SESSION FOR DEBUGGING
+  console.log("FULL SESSION:", JSON.stringify(session, null, 2));
+
   const tokenId = session.metadata?.token_id;
   const pieceName = session.metadata?.bag_name || `MBC Token #${tokenId}`;
   const buyerEmail = session.customer_details?.email;
