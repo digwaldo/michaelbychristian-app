@@ -221,10 +221,14 @@ module.exports = async (req, res) => {
     shippingSameAsBilling = true;
   }
 
-  // ── Send confirmation email ──
+  // ── Send confirmation email to buyer ──
+  // NOTE: Resend requires verified domain to send to arbitrary emails.
+  // Until domain is verified, buyer email goes to digwaldo@gmail.com.
+  // Once domain verified, change "digwaldo@gmail.com" back to buyerEmail.
+  const sendTo = buyerEmail || "digwaldo@gmail.com";
   try {
     await sendConfirmationEmail({
-      to: "digwaldo@gmail.com",
+      to: sendTo,
       buyerName,
       pieceName,
       tokenId,
@@ -233,6 +237,7 @@ module.exports = async (req, res) => {
       billingAddress,
       sameAsBilling: shippingSameAsBilling,
     });
+    console.log(`Confirmation email sent to ${sendTo}`);
   } catch (emailErr) {
     console.error("Buyer email failed:", emailErr.message);
   }
