@@ -10,6 +10,20 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
 module.exports.config = { api: { bodyParser: false } };
 
+// Clean address field — strip Stripe placeholder values
+function cleanField(val) {
+  if (!val) return null;
+  const v = val.trim();
+  if (
+    v === "" ||
+    v === "--please select--" ||
+    v === "Please select" ||
+    v === "N/A"
+  )
+    return null;
+  return v;
+}
+
 function getRawBody(req) {
   return new Promise((resolve, reject) => {
     let data = "";
@@ -158,24 +172,38 @@ module.exports = async (req, res) => {
 
   if (session.shipping_details?.address) {
     const a = session.shipping_details.address;
+    const cityStateZip = [
+      cleanField(a.city),
+      cleanField(a.state),
+      cleanField(a.postal_code),
+    ]
+      .filter(Boolean)
+      .join(", ");
     shippingAddress = [
-      session.shipping_details.name,
-      a.line1,
-      a.line2,
-      `${a.city || ""}, ${a.state || ""} ${a.postal_code || ""}`.trim(),
-      a.country,
+      cleanField(session.shipping_details.name),
+      cleanField(a.line1),
+      cleanField(a.line2),
+      cityStateZip || null,
+      cleanField(a.country),
     ]
       .filter(Boolean)
       .join("\n");
   } else if (session.customer_details?.address) {
     // Customer used billing address as shipping
     const a = session.customer_details.address;
+    const cityStateZip2 = [
+      cleanField(a.city),
+      cleanField(a.state),
+      cleanField(a.postal_code),
+    ]
+      .filter(Boolean)
+      .join(", ");
     shippingAddress = [
-      session.customer_details.name,
-      a.line1,
-      a.line2,
-      `${a.city || ""}, ${a.state || ""} ${a.postal_code || ""}`.trim(),
-      a.country,
+      cleanField(session.customer_details.name),
+      cleanField(a.line1),
+      cleanField(a.line2),
+      cityStateZip2 || null,
+      cleanField(a.country),
     ]
       .filter(Boolean)
       .join("\n");
@@ -186,12 +214,19 @@ module.exports = async (req, res) => {
   let billingAddress = null;
   if (session.customer_details?.address) {
     const b = session.customer_details.address;
+    const cityStateZip3 = [
+      cleanField(b.city),
+      cleanField(b.state),
+      cleanField(b.postal_code),
+    ]
+      .filter(Boolean)
+      .join(", ");
     billingAddress = [
-      session.customer_details.name,
-      b.line1,
-      b.line2,
-      `${b.city || ""}, ${b.state || ""} ${b.postal_code || ""}`.trim(),
-      b.country,
+      cleanField(session.customer_details.name),
+      cleanField(b.line1),
+      cleanField(b.line2),
+      cityStateZip3 || null,
+      cleanField(b.country),
     ]
       .filter(Boolean)
       .join("\n");
