@@ -29,11 +29,19 @@ async function sendConfirmationEmail({
   tokenId,
   amountPaid,
   shippingAddress,
+  billingAddress,
 }) {
   const shippingSection = shippingAddress
     ? `<div style="margin:24px 0;padding:20px;background:#1A1916;border:1px solid rgba(184,150,62,0.2);">
         <p style="font-size:10px;color:#B8963E;margin-bottom:8px;">SHIPPING ADDRESS</p>
         <p style="font-size:13px;color:#F5EFE0;line-height:1.8;white-space:pre-line;">${shippingAddress}</p>
+       </div>`
+    : "";
+
+  const billingSection = billingAddress
+    ? `<div style="margin:24px 0;padding:20px;background:#1A1916;border:1px solid rgba(184,150,62,0.2);">
+        <p style="font-size:10px;color:#B8963E;margin-bottom:8px;">BILLING ADDRESS</p>
+        <p style="font-size:13px;color:#F5EFE0;line-height:1.8;white-space:pre-line;">${billingAddress}</p>
        </div>`
     : "";
 
@@ -74,6 +82,7 @@ async function sendConfirmationEmail({
       </div>
     </div>
     ${shippingSection}
+    ${billingSection}
     <div style="background:#1A1916;border:1px solid rgba(184,150,62,0.2);padding:20px;margin:24px 0;">
       <p style="font-size:12px;color:#9A8E7A;line-height:1.8;margin:0;">
         <strong style="color:#F5EFE0;">Next steps:</strong> Reply to this email with your shipping address and we will dispatch your bag. 
@@ -157,6 +166,21 @@ module.exports = async (req, res) => {
       .join("\n");
   }
 
+  // ── Extract billing address ──
+  let billingAddress = null;
+  if (session.customer_details?.address) {
+    const b = session.customer_details.address;
+    billingAddress = [
+      session.customer_details.name,
+      b.line1,
+      b.line2,
+      `${b.city || ""}, ${b.state || ""} ${b.postal_code || ""}`.trim(),
+      b.country,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
   // ── Send confirmation email to buyer ──
   if (buyerEmail) {
     try {
@@ -167,6 +191,7 @@ module.exports = async (req, res) => {
         tokenId,
         amountPaid,
         shippingAddress,
+        billingAddress,
       });
     } catch (emailErr) {
       console.error("Buyer email failed:", emailErr.message);
@@ -221,9 +246,13 @@ module.exports = async (req, res) => {
           <span style="font-size:12px;color:#7A7060;">Buyer Email: </span>
           <span style="font-size:12px;color:#F5EFE0;">${buyerEmail || "—"}</span>
         </div>
-        <div style="padding:10px 20px;">
+        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
           <span style="font-size:12px;color:#7A7060;">Shipping: </span>
           <span style="font-size:12px;color:#F5EFE0;white-space:pre-line;">${shippingAddress || "Not provided yet"}</span>
+        </div>
+        <div style="padding:10px 20px;">
+          <span style="font-size:12px;color:#7A7060;">Billing: </span>
+          <span style="font-size:12px;color:#F5EFE0;white-space:pre-line;">${billingAddress || "Not provided yet"}</span>
         </div>
       </div>
     </div>
