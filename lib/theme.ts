@@ -18,7 +18,8 @@ export const C = {
 };
 
 export const BACKEND =
-  process.env.EXPO_PUBLIC_BACKEND_URL ?? "http://localhost:3000";
+  process.env.EXPO_PUBLIC_BACKEND_URL ??
+  "https://michaelbychristian-app.vercel.app";
 export const CONTRACT =
   "CB7GCGWAHWCF3SAJTYCR7JEFINLJBKA3LV7BZNAI46OXYPYZSTFZ6EMB";
 export const RPC_URL = "https://soroban-testnet.stellar.org";
