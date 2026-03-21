@@ -46,7 +46,7 @@ async function loadTokenFromStellar(tokenId: number) {
     return Sdk.scValToNative(sim.result.retval);
   }
 
-  const raw = await simulate("token_data", [
+  const raw = await simulate("full_token_data", [
     Sdk.nativeToScVal(tokenId, { type: "u64" }),
   ]);
 
