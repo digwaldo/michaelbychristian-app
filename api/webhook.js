@@ -157,7 +157,7 @@ module.exports = async (req, res) => {
       .join("\n");
   }
 
-  // ── Send confirmation email ──
+  // ── Send confirmation email to buyer ──
   if (buyerEmail) {
     try {
       await sendConfirmationEmail({
@@ -169,10 +169,74 @@ module.exports = async (req, res) => {
         shippingAddress,
       });
     } catch (emailErr) {
-      console.error("Email failed:", emailErr.message);
+      console.error("Buyer email failed:", emailErr.message);
     }
   } else {
     console.log("No buyer email found in session — skipping email");
+  }
+
+  // ── Send sale notification to owner ──
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "MBC Store <onboarding@resend.dev>",
+        to: ["youngcompltd@gmail.com"],
+        subject: `💰 New Sale — ${pieceName} · ${(amountPaid / 100).toFixed(0)} USD`,
+        html: `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#0C0B09;font-family:Helvetica,Arial,sans-serif;">
+<div style="max-width:600px;margin:0 auto;padding:40px 20px;">
+  <div style="text-align:center;padding:32px 0;border-bottom:1px solid rgba(184,150,62,0.2);">
+    <p style="font-size:10px;letter-spacing:0.4em;text-transform:uppercase;color:#B8963E;">MBC — New Sale</p>
+    <h1 style="font-family:Georgia,serif;font-size:36px;color:#F5EFE0;margin:8px 0 0;">💰 ${pieceName}</h1>
+    <h2 style="font-family:Georgia,serif;font-size:28px;color:#5BAF85;margin:8px 0 0;">${(amountPaid / 100).toFixed(0)} USD</h2>
+  </div>
+  <div style="padding:32px 0;">
+    <div style="border:1px solid rgba(184,150,62,0.2);margin:24px 0;">
+      <div style="padding:12px 20px;background:#1A1916;">
+        <p style="font-size:9px;letter-spacing:0.3em;text-transform:uppercase;color:#B8963E;margin:0;">Order Details</p>
+      </div>
+      <div>
+        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
+          <span style="font-size:12px;color:#7A7060;">Piece: </span>
+          <span style="font-size:12px;color:#D4AF6A;">${pieceName}</span>
+        </div>
+        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
+          <span style="font-size:12px;color:#7A7060;">Token ID: </span>
+          <span style="font-size:12px;color:#F5EFE0;">#${tokenId}</span>
+        </div>
+        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
+          <span style="font-size:12px;color:#7A7060;">Amount: </span>
+          <span style="font-size:12px;color:#5BAF85;">${(amountPaid / 100).toFixed(0)} USD</span>
+        </div>
+        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
+          <span style="font-size:12px;color:#7A7060;">Buyer: </span>
+          <span style="font-size:12px;color:#F5EFE0;">${buyerName || "—"}</span>
+        </div>
+        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
+          <span style="font-size:12px;color:#7A7060;">Buyer Email: </span>
+          <span style="font-size:12px;color:#F5EFE0;">${buyerEmail || "—"}</span>
+        </div>
+        <div style="padding:10px 20px;">
+          <span style="font-size:12px;color:#7A7060;">Shipping: </span>
+          <span style="font-size:12px;color:#F5EFE0;white-space:pre-line;">${shippingAddress || "Not provided yet"}</span>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:12px;color:#7A7060;text-align:center;">
+      View in <a href="https://dashboard.stripe.com/test/payments" style="color:#B8963E;">Stripe Dashboard</a>
+    </p>
+  </div>
+</div></body></html>`,
+      }),
+    });
+    console.log("Owner notification sent");
+  } catch (ownerEmailErr) {
+    console.error("Owner email failed:", ownerEmailErr.message);
   }
 
   return res.status(200).json({ received: true });
