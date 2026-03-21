@@ -30,10 +30,11 @@ async function sendConfirmationEmail({
   amountPaid,
   shippingAddress,
   billingAddress,
+  sameAsBilling,
 }) {
   const shippingSection = shippingAddress
     ? `<div style="margin:24px 0;padding:20px;background:#1A1916;border:1px solid rgba(184,150,62,0.2);">
-        <p style="font-size:10px;color:#B8963E;margin-bottom:8px;">SHIPPING ADDRESS</p>
+        <p style="font-size:10px;color:#B8963E;margin-bottom:8px;">SHIPPING ADDRESS${sameAsBilling ? " (Same as Billing)" : ""}</p>
         <p style="font-size:13px;color:#F5EFE0;line-height:1.8;white-space:pre-line;">${shippingAddress}</p>
        </div>`
     : "";
@@ -153,17 +154,32 @@ module.exports = async (req, res) => {
   const amountPaid = session.amount_total;
 
   let shippingAddress = null;
+  let shippingSameAsBilling = false;
+
   if (session.shipping_details?.address) {
     const a = session.shipping_details.address;
     shippingAddress = [
       session.shipping_details.name,
       a.line1,
       a.line2,
-      `${a.city}, ${a.state} ${a.postal_code}`,
+      `${a.city || ""}, ${a.state || ""} ${a.postal_code || ""}`.trim(),
       a.country,
     ]
       .filter(Boolean)
       .join("\n");
+  } else if (session.customer_details?.address) {
+    // Customer used billing address as shipping
+    const a = session.customer_details.address;
+    shippingAddress = [
+      session.customer_details.name,
+      a.line1,
+      a.line2,
+      `${a.city || ""}, ${a.state || ""} ${a.postal_code || ""}`.trim(),
+      a.country,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    shippingSameAsBilling = true;
   }
 
   // ── Extract billing address ──
@@ -192,6 +208,7 @@ module.exports = async (req, res) => {
         amountPaid,
         shippingAddress,
         billingAddress,
+        sameAsBilling: shippingSameAsBilling,
       });
     } catch (emailErr) {
       console.error("Buyer email failed:", emailErr.message);
@@ -247,7 +264,7 @@ module.exports = async (req, res) => {
           <span style="font-size:12px;color:#F5EFE0;">${buyerEmail || "—"}</span>
         </div>
         <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
-          <span style="font-size:12px;color:#7A7060;">Shipping: </span>
+          <span style="font-size:12px;color:#7A7060;">Shipping${shippingSameAsBilling ? " (Same as Billing)" : ""}: </span>
           <span style="font-size:12px;color:#F5EFE0;white-space:pre-line;">${shippingAddress || "Not provided yet"}</span>
         </div>
         <div style="padding:10px 20px;">
