@@ -117,7 +117,7 @@ async function sendConfirmationEmail({
     },
     body: JSON.stringify({
       from: "MBC Michael By Christian <onboarding@resend.dev>",
-      to: ["digwaldo@gmail.com"],
+      to: [to],
       subject: `Order Confirmed — ${pieceName} · MBC`,
       html,
     }),
