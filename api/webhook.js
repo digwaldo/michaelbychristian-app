@@ -117,7 +117,7 @@ async function sendConfirmationEmail({
     },
     body: JSON.stringify({
       from: "MBC Michael By Christian <onboarding@resend.dev>",
-      to: [to],
+      to: ["digwaldo@gmail.com"],
       subject: `Order Confirmed — ${pieceName} · MBC`,
       html,
     }),
@@ -228,7 +228,7 @@ module.exports = async (req, res) => {
   const sendTo = buyerEmail || "digwaldo@gmail.com";
   try {
     await sendConfirmationEmail({
-      to: sendTo,
+      to: "digwaldo@gmail.com",
       buyerName,
       pieceName,
       tokenId,
