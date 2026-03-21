@@ -1,27 +1,30 @@
 // api/create-checkout.js
-// Vercel serverless function — creates a Stripe Checkout session for a bag purchase
-//
-// Flow:
-//   1. Read bag data + ownership from the Stellar contract
-//   2. Confirm the admin wallet still owns the token (i.e. it hasn't sold yet)
-//   3. Create a Stripe Checkout session — user pays by card / Apple Pay / Google Pay
-//   4. No NFT transfer here — handle that separately via a Stripe webhook when payment succeeds
-//
-// Place this file at:  mbc-app/api/create-checkout.js
-// Vercel exposes it at: https://your-app.vercel.app/api/create-checkout
+// Uses raw Stellar SDK simulation — same approach as collection.tsx and [id].tsx
+// No contract-client dependency needed
 
 const Stripe = require("stripe");
 const StellarSdk = require("@stellar/stellar-sdk");
-const { basicNodeSigner } = require("@stellar/stellar-sdk/contract");
+const {
+  rpc,
+  Contract,
+  Account,
+  TransactionBuilder,
+  BASE_FEE,
+  nativeToScVal,
+  scValToNative,
+  Keypair,
+} = StellarSdk;
 
 const STELLAR_CONTRACT =
   process.env.STELLAR_CONTRACT_ID ||
-  "CACP7SFR7K5MVX4ZRGOTK4WX5NDPQUTFUJTIGU4LJZVDJGILYT2YRDEQ";
+  "CB7GCGWAHWCF3SAJTYCR7JEFINLJBKA3LV7BZNAI46OXYPYZSTFZ6EMB";
 const STELLAR_RPC =
   process.env.STELLAR_RPC_URL || "https://soroban-testnet.stellar.org";
 const STELLAR_PASSPHRASE =
   process.env.STELLAR_NETWORK_PASSPHRASE || "Test SDF Network ; September 2015";
-const ADMIN_SECRET = process.env.STELLAR_ADMIN_SECRET;
+const ADMIN_WALLET =
+  process.env.STELLAR_ADMIN_WALLET ||
+  "GB2GKZ22XFF5BZWRV6AIO7JLCDT7W36Y5DFIUWPENA5IIDEAH7FLXOA3";
 
 function setCORS(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -29,53 +32,63 @@ function setCORS(res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
-// ── Read bag data from Stellar contract ───────────────────────
-async function checkBagAvailability(tokenId) {
-  const adminKeypair = StellarSdk.Keypair.fromSecret(ADMIN_SECRET);
-  const adminPublic = adminKeypair.publicKey();
-  const { signTransaction } = basicNodeSigner(adminKeypair, STELLAR_PASSPHRASE);
+// ── Same simulation pattern as collection.tsx ─────────────────
+async function simulate(fn, args = []) {
+  const server = new rpc.Server(STELLAR_RPC);
+  const contract = new Contract(STELLAR_CONTRACT);
+  const keypair = Keypair.random();
+  const account = new Account(keypair.publicKey(), "0");
 
-  const { Client } = await import("../contract-client/dist/index.js");
-
-  const client = new Client({
-    contractId: STELLAR_CONTRACT,
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
     networkPassphrase: STELLAR_PASSPHRASE,
-    rpcUrl: STELLAR_RPC,
-    publicKey: adminPublic,
-    signTransaction,
-  });
+  })
+    .addOperation(contract.call(fn, ...args))
+    .setTimeout(30)
+    .build();
 
-  // 1. Confirm admin wallet is still the owner (bag hasn't sold yet)
-  const ownerTx = await client.owner_of({ token_id: BigInt(tokenId) });
-  const retval = ownerTx.simulation?.result?.retval;
-  if (!retval) throw new Error(`Token #${tokenId} not found on contract`);
+  const sim = await server.simulateTransaction(tx);
+  if (!rpc.Api.isSimulationSuccess(sim)) {
+    throw new Error(`Simulation failed for ${fn}`);
+  }
+  return scValToNative(sim.result.retval);
+}
 
-  const currentOwner = StellarSdk.Address.fromScVal(retval).toString();
-  if (currentOwner !== adminPublic) {
+async function checkBagAvailability(tokenId) {
+  const tokenArg = nativeToScVal(tokenId, { type: "u64" });
+
+  const [raw, ownerRaw] = await Promise.all([
+    simulate("full_token_data", [tokenArg]),
+    simulate("owner_of", [tokenArg]).catch(() => null),
+  ]);
+
+  if (!raw) throw new Error(`Token #${tokenId} not found on contract`);
+
+  // Check admin wallet still owns it
+  const owner = ownerRaw ? String(ownerRaw).trim() : null;
+  const ownedByAdmin =
+    !owner || owner.toUpperCase() === ADMIN_WALLET.toUpperCase();
+
+  if (!ownedByAdmin) {
     throw new Error(
       `Token #${tokenId} is no longer available — it has already been purchased`,
     );
   }
 
-  // 2. Read token data for price, name, traits
-  const dataTx = await client.full_token_data({ token_id: BigInt(tokenId) });
-  const dataRetval = dataTx.simulation?.result?.retval;
-  if (!dataRetval) throw new Error(`Could not load data for token #${tokenId}`);
-
-  const data = StellarSdk.scValToNative(dataRetval);
-  if (!data.listed)
+  if (raw.listed === false) {
     throw new Error(`Token #${tokenId} is not currently listed for sale`);
+  }
 
-  const t = data.traits || {};
+  const t = raw.traits || {};
 
   return {
-    name: data.name || `MBC Token #${tokenId}`,
-    price_usdc: data.price_usdc ? Number(data.price_usdc) : 20000,
-    edition_type: t.edition_type || data.edition_type || "",
-    image: data.image
-      ? data.image.startsWith("ipfs://")
-        ? data.image.replace("ipfs://", "https://ipfs.io/ipfs/")
-        : data.image
+    name: raw.name || `MBC Token #${tokenId}`,
+    price_usdc: raw.price_usdc ? Number(raw.price_usdc) : 20000,
+    edition_type: t.edition_type || raw.edition_type || "",
+    image: raw.image
+      ? raw.image.startsWith("ipfs://")
+        ? raw.image.replace("ipfs://", "https://ipfs.io/ipfs/")
+        : raw.image
       : null,
   };
 }
@@ -93,7 +106,6 @@ module.exports = async (req, res) => {
     const { tokenId, successUrl, cancelUrl } = req.body;
     if (!tokenId) return res.status(400).json({ error: "tokenId is required" });
 
-    // Verify availability on Stellar before charging the card
     let bag;
     try {
       bag = await checkBagAvailability(Number(tokenId));
@@ -105,7 +117,8 @@ module.exports = async (req, res) => {
       });
     }
 
-    const origin = req.headers.origin || "https://your-app.vercel.app";
+    const origin =
+      req.headers.origin || "https://michael-by-christian.vercel.app";
     const baseSuccessUrl = successUrl || `${origin}/success`;
     const baseCancelUrl = cancelUrl || `${origin}/`;
 
