@@ -173,8 +173,14 @@ module.exports = async (req, res) => {
   let shippingAddress = null;
   let shippingSameAsBilling = false;
 
-  if (session.shipping_details?.address) {
-    const a = session.shipping_details.address;
+  // Stripe puts real shipping in collected_information.shipping_details
+  const shippingSrc =
+    session.collected_information?.shipping_details ||
+    session.shipping_details ||
+    null;
+
+  if (shippingSrc?.address) {
+    const a = shippingSrc.address;
     const cityStateZip = [
       cleanField(a.city),
       cleanField(a.state),
@@ -183,7 +189,7 @@ module.exports = async (req, res) => {
       .filter(Boolean)
       .join(", ");
     shippingAddress = [
-      cleanField(session.shipping_details.name),
+      cleanField(shippingSrc.name),
       cleanField(a.line1),
       cleanField(a.line2),
       cityStateZip || null,
@@ -191,48 +197,32 @@ module.exports = async (req, res) => {
     ]
       .filter(Boolean)
       .join("\n");
-  } else if (session.customer_details?.address) {
-    // Customer used billing address as shipping
-    const a = session.customer_details.address;
-    const cityStateZip2 = [
-      cleanField(a.city),
-      cleanField(a.state),
-      cleanField(a.postal_code),
-    ]
-      .filter(Boolean)
-      .join(", ");
-    shippingAddress = [
-      cleanField(session.customer_details.name),
-      cleanField(a.line1),
-      cleanField(a.line2),
-      cityStateZip2 || null,
-      cleanField(a.country),
-    ]
-      .filter(Boolean)
-      .join("\n");
-    shippingSameAsBilling = true;
   }
 
-  // ── Extract billing address ──
+  // Billing — use customer_details.address but skip --please select-- city
   let billingAddress = null;
   if (session.customer_details?.address) {
     const b = session.customer_details.address;
-    const cityStateZip3 = [
+    const cityStateZip2 = [
       cleanField(b.city),
       cleanField(b.state),
       cleanField(b.postal_code),
     ]
       .filter(Boolean)
       .join(", ");
-    billingAddress = [
+    const billingLines = [
       cleanField(session.customer_details.name),
       cleanField(b.line1),
       cleanField(b.line2),
-      cityStateZip3 || null,
+      cityStateZip2 || null,
       cleanField(b.country),
-    ]
-      .filter(Boolean)
-      .join("\n");
+    ].filter(Boolean);
+    if (billingLines.length > 1) billingAddress = billingLines.join("\n");
+  }
+
+  // If billing and shipping are the same address, note it
+  if (shippingAddress && billingAddress && shippingAddress === billingAddress) {
+    shippingSameAsBilling = true;
   }
 
   // ── Send confirmation email to buyer ──
