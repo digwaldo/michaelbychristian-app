@@ -3,7 +3,6 @@
 // NFT transfer is skipped for now — will be added later
 
 const Stripe = require("stripe");
-const StellarSdk = require("@stellar/stellar-sdk");
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -14,13 +13,10 @@ module.exports.config = { api: { bodyParser: false } };
 function cleanField(val) {
   if (!val) return null;
   const v = val.trim();
-  if (
-    v === "" ||
-    v === "--please select--" ||
-    v === "Please select" ||
-    v === "N/A"
-  )
-    return null;
+  if (!v) return null;
+  // Strip any variation of Stripe's placeholder text
+  if (v.toLowerCase().replace(/\s+/g, "").includes("pleaseselect")) return null;
+  if (v === "N/A" || v === "n/a") return null;
   return v;
 }
 
@@ -225,24 +221,20 @@ module.exports = async (req, res) => {
     shippingSameAsBilling = true;
   }
 
-  // ── Send confirmation email to buyer ──
-  if (buyerEmail) {
-    try {
-      await sendConfirmationEmail({
-        to: "digwaldo@gmail.com",
-        buyerName,
-        pieceName,
-        tokenId,
-        amountPaid,
-        shippingAddress,
-        billingAddress,
-        sameAsBilling: shippingSameAsBilling,
-      });
-    } catch (emailErr) {
-      console.error("Buyer email failed:", emailErr.message);
-    }
-  } else {
-    console.log("No buyer email found in session — skipping email");
+  // ── Send confirmation email ──
+  try {
+    await sendConfirmationEmail({
+      to: "digwaldo@gmail.com",
+      buyerName,
+      pieceName,
+      tokenId,
+      amountPaid,
+      shippingAddress,
+      billingAddress,
+      sameAsBilling: shippingSameAsBilling,
+    });
+  } catch (emailErr) {
+    console.error("Buyer email failed:", emailErr.message);
   }
 
   // ── Send sale notification to owner ──
