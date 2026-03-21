@@ -184,20 +184,20 @@ export default function SuccessScreen() {
             <Text style={s.titleEm}>{data?.pieceName || "an MBC piece"}</Text>
           </Text>
           <Text style={s.bodyTxt}>
-            Your NFT has been transferred to your Stellar wallet. A confirmation
-            email is on its way.
+            Your payment is confirmed. Your order is being processed and you
+            will receive a confirmation email shortly.
           </Text>
 
           <View style={s.detailBox}>
             {[
               ["Piece", data?.pieceName || "—"],
               ["Token ID", `#${data?.tokenId || token_id}`],
-              ["Wallet", short(data?.buyerWallet)],
-              ["Blockchain", "Stellar · Soroban"],
+              ["Email", data?.buyerEmail || "—"],
               [
                 "Amount Paid",
-                data?.amount ? `$${(data.amount / 100).toFixed(0)} USD` : "—",
+                data?.amount ? `${(data.amount / 100).toFixed(0)} USD` : "—",
               ],
+              ["Status", "Confirmed ✓"],
             ].map(([k, v]) => (
               <View key={k} style={s.detailRow}>
                 <Text style={s.detailKey}>{k}</Text>
@@ -206,9 +206,6 @@ export default function SuccessScreen() {
             ))}
           </View>
 
-          <TouchableOpacity style={s.btnPrimary} onPress={openExplorer}>
-            <Text style={s.btnPrimaryTxt}>View on Stellar Explorer ↗</Text>
-          </TouchableOpacity>
           <TouchableOpacity
             style={s.btnSecondary}
             onPress={() => router.replace("/")}

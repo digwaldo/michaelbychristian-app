@@ -1,6 +1,5 @@
 // api/verify-payment.js
-// Called after Stripe redirects back to success page
-// Verifies payment and returns NFT transfer details
+// Verifies Stripe payment — transfer status ignored until webhook is implemented
 
 const Stripe = require("stripe");
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -15,29 +14,22 @@ module.exports = async (req, res) => {
     return res.status(400).json({ error: "session_id required" });
 
   try {
-    const session = await stripe.checkout.sessions.retrieve(session_id, {
-      expand: ["payment_intent"],
-    });
+    const session = await stripe.checkout.sessions.retrieve(session_id);
 
     if (session.payment_status !== "paid") {
       return res.status(400).json({ error: "Payment not completed" });
     }
 
-    // Check if transfer failed (recorded in payment intent metadata)
-    const piMeta = session.payment_intent?.metadata || {};
-    const transferFailed = piMeta.transfer_status === "failed";
-    const transferError = piMeta.transfer_error || null;
-
     return res.status(200).json({
       paid: true,
-      tokenId: session.metadata.token_id,
-      pieceName: session.metadata.piece_name,
+      tokenId: session.metadata?.token_id,
+      pieceName: session.metadata?.bag_name,
       buyerEmail: session.customer_details?.email,
-      buyerWallet: session.metadata.buyer_wallet,
+      buyerWallet: null, // no transfer yet
       amount: session.amount_total,
       currency: session.currency,
-      transferFailed,
-      transferError,
+      transferFailed: false, // not implemented yet
+      transferError: null,
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
