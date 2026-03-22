@@ -18,7 +18,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { C, CONTRACT, PASSPHRASE, RPC_URL } from "../lib/theme";
+import { BACKEND, C, CONTRACT, PASSPHRASE, RPC_URL } from "../lib/theme";
 
 // ── Same responsive hook as index.tsx ─────────────────────────
 const useClientLayout = () => {
@@ -318,6 +318,14 @@ export default function CollectionScreen() {
     async (isRefresh = false) => {
       if (!isRefresh) setLoading(true);
       setError(null);
+      let kvSoldIds: Set<number> = new Set();
+      try {
+        const soldRes = await fetch(`${BACKEND}/api/sold-list`);
+        const soldData = await soldRes.json();
+        kvSoldIds = new Set(soldData.soldTokenIds || []);
+      } catch (e) {
+        console.log("KV sold-list fetch failed, using Stellar only");
+      }
 
       try {
         const Sdk = await import("@stellar/stellar-sdk" as any);
@@ -340,8 +348,9 @@ export default function CollectionScreen() {
             const owner = ownerRaw ? String(ownerRaw).trim() : null;
             const ownedByAdmin =
               !owner || owner.toUpperCase() === ADMIN_WALLET.toUpperCase();
-            const isSold = !ownedByAdmin;
-            const isListed = raw?.listed !== false && ownedByAdmin;
+            const soldInKV = kvSoldIds.has(i);
+            const isSold = !ownedByAdmin || soldInKV;
+            const isListed = raw?.listed !== false && ownedByAdmin && !soldInKV;
 
             items.push({
               tokenId: i,

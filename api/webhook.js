@@ -6,6 +6,7 @@ const Stripe = require("stripe");
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const { markTokenSold } = require("./mark-sold");
 
 module.exports.config = { api: { bodyParser: false } };
 
@@ -67,7 +68,7 @@ async function sendConfirmationEmail({
   <div style="padding:32px 0;">
     <p style="font-size:14px;color:#9A8E7A;line-height:1.8;">
       ${buyerName ? "Hi " + buyerName + "," : "Hi,"}<br><br>
-      Your payment has been confirmed. We are preparing your order and will be in touch shortly with shipping details.
+      Your payment has been confirmed. Your bag is being prepared for shipment. Once it arrives, scan the NFC chip or use the claim link below to receive your Authentication Contract (NFT).
     </p>
     <div style="border:1px solid rgba(184,150,62,0.2);margin:24px 0;">
       <div style="padding:12px 20px;background:#1A1916;">
@@ -95,10 +96,9 @@ async function sendConfirmationEmail({
     ${shippingSection}
     ${billingSection}
     <div style="background:#1A1916;border:1px solid rgba(184,150,62,0.2);padding:20px;margin:24px 0;">
-      <p style="font-size:12px;color:#9A8E7A;line-height:1.8;margin:0;">
-        <strong style="color:#F5EFE0;">Next steps:</strong> Reply to this email with your shipping address and we will dispatch your bag. 
-        Your Authentication Contract (NFT) will be transferred to your Stellar wallet upon shipment.
-      </p>
+      <p style="font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:#B8963E;margin-bottom:8px;">Claim Your NFT</p>
+      <p style="font-size:12px;color:#9A8E7A;line-height:1.8;margin:0 0 12px;">When your bag arrives, scan the NFC chip or click below to claim your Authentication Contract:</p>
+      <a href="https://michaelbychristian-app.vercel.app/piece/${tokenId}" style="display:inline-block;padding:12px 24px;background:#B8963E;color:#0C0B09;font-size:9px;font-weight:700;letter-spacing:0.3em;text-transform:uppercase;text-decoration:none;">Claim Token #${tokenId} →</a>
     </div>
     <p style="font-size:12px;color:#7A7060;text-align:center;">
       Questions? <a href="mailto:youngcompltd@gmail.com" style="color:#B8963E;">youngcompltd@gmail.com</a>
@@ -117,7 +117,7 @@ async function sendConfirmationEmail({
     },
     body: JSON.stringify({
       from: "MBC Michael By Christian <onboarding@resend.dev>",
-      to: ["digwaldo@gmail.com"],
+      to: [to],
       subject: `Order Confirmed — ${pieceName} · MBC`,
       html,
     }),
@@ -221,6 +221,19 @@ module.exports = async (req, res) => {
     shippingSameAsBilling = true;
   }
 
+  // ── Mark token as sold in KV immediately ──
+  try {
+    await markTokenSold({
+      tokenId: Number(tokenId),
+      buyerEmail,
+      buyerName,
+      amount: amountPaid,
+      shippingAddress,
+    });
+  } catch (kvErr) {
+    console.error("KV mark-sold failed:", kvErr.message);
+  }
+
   // ── Send confirmation email to buyer ──
   // NOTE: Resend requires verified domain to send to arbitrary emails.
   // Until domain is verified, buyer email goes to digwaldo@gmail.com.
@@ -228,7 +241,7 @@ module.exports = async (req, res) => {
   const sendTo = buyerEmail || "digwaldo@gmail.com";
   try {
     await sendConfirmationEmail({
-      to: "digwaldo@gmail.com",
+      to: sendTo,
       buyerName,
       pieceName,
       tokenId,

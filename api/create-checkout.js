@@ -3,6 +3,7 @@
 // No contract-client dependency needed
 
 const Stripe = require("stripe");
+const { isTokenSold } = require("./mark-sold");
 const StellarSdk = require("@stellar/stellar-sdk");
 const {
   rpc,
@@ -49,7 +50,9 @@ async function simulate(fn, args = []) {
 
   const sim = await server.simulateTransaction(tx);
   if (!rpc.Api.isSimulationSuccess(sim)) {
-    throw new Error(`Simulation failed for ${fn}`);
+    const errDetail = JSON.stringify(sim).slice(0, 300);
+    console.error(`Simulation failed for ${fn}:`, errDetail);
+    throw new Error(`Simulation failed for ${fn}: ${errDetail}`);
   }
   return scValToNative(sim.result.retval);
 }
@@ -62,6 +65,8 @@ async function checkBagAvailability(tokenId) {
     simulate("owner_of", [tokenArg]).catch(() => null),
   ]);
 
+  console.log("full_token_data result:", JSON.stringify(raw).slice(0, 200));
+  console.log("owner_of result:", ownerRaw);
   if (!raw) throw new Error(`Token #${tokenId} not found on contract`);
 
   // Check admin wallet still owns it
@@ -105,6 +110,22 @@ module.exports = async (req, res) => {
   try {
     const { tokenId, successUrl, cancelUrl } = req.body;
     if (!tokenId) return res.status(400).json({ error: "tokenId is required" });
+
+    // ── Check KV sold list first (fast, no Stellar call needed) ──
+    try {
+      const alreadySold = await isTokenSold(Number(tokenId));
+      if (alreadySold) {
+        return res.status(400).json({
+          error: "This piece has already been purchased.",
+          unavailable: true,
+        });
+      }
+    } catch (kvErr) {
+      console.log(
+        "KV check failed, falling through to Stellar:",
+        kvErr.message,
+      );
+    }
 
     let bag;
     try {
