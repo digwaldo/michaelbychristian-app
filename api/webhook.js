@@ -7,6 +7,7 @@ const Stripe = require("stripe");
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const { markTokenSold } = require("./mark-sold");
+const { fetchXLMPrice } = require("./xlm-price");
 
 module.exports.config = { api: { bodyParser: false } };
 
@@ -221,14 +222,28 @@ module.exports = async (req, res) => {
     shippingSameAsBilling = true;
   }
 
-  // ── Mark token as sold in KV immediately ──
+  // ── Mark token as sold in KV immediately + record XLM price ──
   try {
+    let xlmPriceAtPurchase = null;
+    let xlmEquivalent = null;
+    try {
+      xlmPriceAtPurchase = await fetchXLMPrice();
+      xlmEquivalent = amountPaid / 100 / xlmPriceAtPurchase;
+      console.log(
+        `XLM price at purchase: ${xlmPriceAtPurchase}, equivalent: ${xlmEquivalent} XLM`,
+      );
+    } catch (priceErr) {
+      console.log("XLM price fetch failed:", priceErr.message);
+    }
     await markTokenSold({
       tokenId: Number(tokenId),
       buyerEmail,
       buyerName,
       amount: amountPaid,
       shippingAddress,
+      xlmPriceAtPurchase,
+      xlmEquivalent,
+      xlmPriceBaseline: xlmPriceAtPurchase,
     });
   } catch (kvErr) {
     console.error("KV mark-sold failed:", kvErr.message);

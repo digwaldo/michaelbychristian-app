@@ -16,7 +16,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -181,6 +181,9 @@ export default function PieceScreen() {
   // Offer modal
   const [offerVisible, setOfferVisible] = useState(false);
 
+  // XLM price
+  const [xlmPrice, setXlmPrice] = useState<number | null>(null);
+
   const fadeIn = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -191,12 +194,16 @@ export default function PieceScreen() {
     setPageState("loading");
     setError(null);
     try {
-      const [tokenData, soldRes] = await Promise.all([
+      const [tokenData, soldRes, xlmRes] = await Promise.all([
         loadTokenFromStellar(tokenId),
         fetch(`${BACKEND}/api/check-sold?token_id=${tokenId}`)
           .then((r) => r.json())
           .catch(() => ({ sold: false })),
+        fetch(`${BACKEND}/api/xlm-price`)
+          .then((r) => r.json())
+          .catch(() => null),
       ]);
+      if (xlmRes?.price) setXlmPrice(xlmRes.price);
 
       setData(tokenData);
       setSaleData(soldRes);
@@ -299,8 +306,12 @@ export default function PieceScreen() {
 
   const imgUrl = data ? resolveImg(data.image) : "";
   const price = data?.price_usdc
-    ? `$${(data.price_usdc / 100).toFixed(0)}`
+    ? `${(data.price_usdc / 100).toFixed(0)}`
     : "—";
+  const xlmEquiv =
+    data?.price_usdc && xlmPrice
+      ? `${(data.price_usdc / 100 / xlmPrice).toFixed(0)} XLM`
+      : null;
   const init = (data?.name || "MB")
     .split(" ")
     .map((w: string) => w[0])
@@ -451,6 +462,7 @@ export default function PieceScreen() {
                 <>
                   <Text style={s.priceVal}>{price}</Text>
                   <Text style={s.priceLbl}>USD</Text>
+                  {xlmEquiv ? <Text style={s.xlmPrice}>{xlmEquiv}</Text> : null}
                 </>
               ) : (
                 <>
@@ -1170,6 +1182,7 @@ const s = StyleSheet.create({
     color: C.muted,
     marginBottom: 2,
   },
+  xlmPrice: { fontSize: 9, color: C.gold, letterSpacing: 1, marginTop: 4 },
 
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 24 },
   chip: {
