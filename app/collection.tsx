@@ -1,5 +1,4 @@
 // app/collection.tsx — MBC Collection Browser
-// Layout mirrors index.tsx — same nav, same responsive system, same card style
 
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
@@ -20,7 +19,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BACKEND, C, CONTRACT, PASSPHRASE, RPC_URL } from "../lib/theme";
 
-// ── Same responsive hook as index.tsx ─────────────────────────
 const useClientLayout = () => {
   const [layout, setLayout] = useState({
     w: 375,
@@ -41,7 +39,6 @@ const useClientLayout = () => {
         isWeb: Platform.OS === "web" && d.width >= 900,
       });
     };
-
     update();
     const sub = Dimensions.addEventListener("change", update);
     return () => sub?.remove();
@@ -50,16 +47,12 @@ const useClientLayout = () => {
   return layout;
 };
 
-// ── Stellar direct reads ───────────────────────────────────────
 async function callContract(fn: string, args: any[] = []): Promise<any> {
   const Sdk = await import("@stellar/stellar-sdk" as any);
-
   const server = new Sdk.rpc.Server(RPC_URL);
   const contract = new Sdk.Contract(CONTRACT);
-
   const keypair = Sdk.Keypair.random();
   const account = new Sdk.Account(keypair.publicKey(), "0");
-
   const tx = new Sdk.TransactionBuilder(account, {
     fee: Sdk.BASE_FEE,
     networkPassphrase: PASSPHRASE,
@@ -67,29 +60,21 @@ async function callContract(fn: string, args: any[] = []): Promise<any> {
     .addOperation(contract.call(fn, ...args))
     .setTimeout(30)
     .build();
-
   const sim = await server.simulateTransaction(tx);
-  if (!Sdk.rpc.Api.isSimulationSuccess(sim)) {
+  if (!Sdk.rpc.Api.isSimulationSuccess(sim))
     throw new Error("Simulation failed");
-  }
-
   return Sdk.scValToNative(sim.result.retval);
 }
 
-// Admin wallet public key — tokens owned by this address are available to buy
-// Tokens owned by ANY other address are sold
 const ADMIN_WALLET = "GB2GKZ22XFF5BZWRV6AIO7JLCDT7W36Y5DFIUWPENA5IIDEAH7FLXOA3";
 
-// normalize image URLs
 function resolveImg(img: string | undefined): string | null {
   if (!img) return null;
-  if (img.startsWith("ipfs://")) {
+  if (img.startsWith("ipfs://"))
     return img.replace("ipfs://", "https://ipfs.io/ipfs/");
-  }
   return img;
 }
 
-// ── Types ─────────────────────────────────────────────────────
 interface NFTItem {
   tokenId: number;
   name: string;
@@ -98,22 +83,17 @@ interface NFTItem {
   listed: boolean;
   sold: boolean;
   owner: string | null;
-
   silhouette: string;
   model: string;
   edition_type: string;
-
   primary_color: string;
   secondary_color: string;
-
   primary_texture: string;
   secondary_texture: string;
   textured_pattern: string;
-
   hardware: string;
   interior_lining: string;
   authentication: string;
-
   nfc_chip_id: string;
   collection: string;
   collaboration: string;
@@ -122,7 +102,6 @@ interface NFTItem {
   archive_status: string;
   tailored_year: string;
   design_year: string;
-
   rarity_score: number;
   rarity_rank: number;
   rarity_label: string;
@@ -241,38 +220,28 @@ function getRarityLabel(rank: number, total: number) {
 function addRarity(items: NFTItem[]): NFTItem[] {
   const total = items.length;
   if (!total) return items;
-
   const counts: Record<string, Record<string, number>> = {};
-  for (const key of rarityTraitKeys) {
-    counts[String(key)] = {};
-  }
-
+  for (const key of rarityTraitKeys) counts[String(key)] = {};
   const traitCountFreq: Record<number, number> = {};
-
   for (const item of items) {
     const presentKeys = getPresentTraitKeys(item);
     traitCountFreq[presentKeys.length] =
       (traitCountFreq[presentKeys.length] || 0) + 1;
-
     for (const key of presentKeys) {
       const value = String(item[key]).trim();
       counts[String(key)][value] = (counts[String(key)][value] || 0) + 1;
     }
   }
-
   const scored = items.map((item) => {
     const presentKeys = getPresentTraitKeys(item);
     let score = 0;
-
     for (const key of presentKeys) {
       const value = String(item[key]).trim();
       const count = counts[String(key)][value] || 1;
       score += total / count;
     }
-
     const tcCount = traitCountFreq[presentKeys.length] || 1;
     score += total / tcCount;
-
     return {
       ...item,
       rarity_score: score,
@@ -282,9 +251,7 @@ function addRarity(items: NFTItem[]): NFTItem[] {
       trait_count: presentKeys.length,
     };
   });
-
   scored.sort((a, b) => b.rarity_score - a.rarity_score);
-
   return scored.map((item, idx) => {
     const rank = idx + 1;
     return {
@@ -296,7 +263,6 @@ function addRarity(items: NFTItem[]): NFTItem[] {
   });
 }
 
-// ── Component ─────────────────────────────────────────────────
 export default function CollectionScreen() {
   const { isPhone, isWeb } = useClientLayout();
 
@@ -310,6 +276,9 @@ export default function CollectionScreen() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [stats, setStats] = useState({ total: 0, listed: 0 });
 
+  // ── XLM price state ───────────────────────────────────────────
+  const [xlmPrice, setXlmPrice] = useState<number | null>(null);
+
   const sidePad = isPhone ? 18 : 24;
   const maxW = isWeb ? 900 : undefined;
   const COLS = isWeb ? 3 : 2;
@@ -318,6 +287,15 @@ export default function CollectionScreen() {
     async (isRefresh = false) => {
       if (!isRefresh) setLoading(true);
       setError(null);
+
+      // ── Fetch XLM price + KV sold list in parallel ────────────
+      fetch(`${BACKEND}/api/xlm-price`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d?.price) setXlmPrice(d.price);
+        })
+        .catch(() => null);
+
       let kvSoldIds: Set<number> = new Set();
       try {
         const soldRes = await fetch(`${BACKEND}/api/sold-list`);
@@ -342,9 +320,7 @@ export default function CollectionScreen() {
                 Sdk.nativeToScVal(i, { type: "u64" }),
               ]).catch(() => null),
             ]);
-
             const t = raw?.traits || {};
-
             const owner = ownerRaw ? String(ownerRaw).trim() : null;
             const ownedByAdmin =
               !owner || owner.toUpperCase() === ADMIN_WALLET.toUpperCase();
@@ -360,24 +336,19 @@ export default function CollectionScreen() {
               listed: isListed,
               sold: isSold,
               owner,
-
               silhouette: t.silhouette || raw?.silhouette || "",
               model: t.model || raw?.model || "",
               edition_type: t.edition_type || raw?.edition_type || "",
-
               primary_color: t.primary_color || raw?.primary_color || "",
               secondary_color: t.secondary_color || raw?.secondary_color || "",
-
               primary_texture: t.primary_texture || raw?.primary_texture || "",
               secondary_texture:
                 t.secondary_texture || raw?.secondary_texture || "",
               textured_pattern:
                 t.textured_pattern || raw?.textured_pattern || "",
-
               hardware: t.hardware || raw?.hardware || "",
               interior_lining: t.interior_lining || raw?.interior_lining || "",
               authentication: t.authentication || raw?.authentication || "",
-
               nfc_chip_id: t.nfc_chip_id || raw?.nfc_chip_id || "",
               collection: t.collection || raw?.collection || "",
               collaboration: t.collaboration || raw?.collaboration || "",
@@ -386,7 +357,6 @@ export default function CollectionScreen() {
               archive_status: t.archive_status || raw?.archive_status || "",
               tailored_year: t.tailored_year || raw?.tailored_year || "",
               design_year: t.design_year || raw?.design_year || "",
-
               rarity_score: 0,
               rarity_rank: 0,
               rarity_label: "",
@@ -394,12 +364,11 @@ export default function CollectionScreen() {
               trait_count: 0,
             });
           } catch {
-            // skip failed tokens
+            /* skip failed tokens */
           }
         }
 
         const enriched = addRarity(items);
-
         setAll(enriched);
         setStats({
           total: enriched.length,
@@ -422,7 +391,6 @@ export default function CollectionScreen() {
 
   function applyAll(items: NFTItem[], f: Filters, s: SortKey) {
     let r = [...items];
-
     for (const key of traitKeys) {
       if (f[key].length) {
         r = r.filter((n) => {
@@ -431,15 +399,10 @@ export default function CollectionScreen() {
         });
       }
     }
-
-    if (f.status.includes("listed") && !f.status.includes("unlisted")) {
+    if (f.status.includes("listed") && !f.status.includes("unlisted"))
       r = r.filter((n) => n.listed === true);
-    }
-
-    if (f.status.includes("unlisted") && !f.status.includes("listed")) {
+    if (f.status.includes("unlisted") && !f.status.includes("listed"))
       r = r.filter((n) => n.listed !== true);
-    }
-
     if (f.price.length) {
       r = r.filter((n) => {
         const price = n.price_usdc / 100;
@@ -451,10 +414,9 @@ export default function CollectionScreen() {
         });
       });
     }
-
     if (f.rarity_bucket.length) {
-      r = r.filter((n) => {
-        return f.rarity_bucket.some((bucket) => {
+      r = r.filter((n) =>
+        f.rarity_bucket.some((bucket) => {
           if (bucket === "top10")
             return n.rarity_rank > 0 && n.rarity_rank <= 10;
           if (bucket === "top25")
@@ -462,16 +424,14 @@ export default function CollectionScreen() {
           if (bucket === "top50")
             return n.rarity_rank > 0 && n.rarity_rank <= 50;
           return false;
-        });
-      });
+        }),
+      );
     }
-
     if (s === "price_asc") r.sort((a, b) => a.price_usdc - b.price_usdc);
     if (s === "price_desc") r.sort((a, b) => b.price_usdc - a.price_usdc);
     if (s === "name_asc") r.sort((a, b) => a.name.localeCompare(b.name));
     if (s === "newest") r.sort((a, b) => b.tokenId - a.tokenId);
     if (s === "rarity") r.sort((a, b) => a.rarity_rank - b.rarity_rank);
-
     setDisplayed(r);
   }
 
@@ -479,7 +439,6 @@ export default function CollectionScreen() {
     const next = filters[key].includes(val)
       ? filters[key].filter((v) => v !== val)
       : [...filters[key], val];
-
     const f = { ...filters, [key]: next };
     setFilters(f);
     applyAll(all, f, sort);
@@ -502,6 +461,8 @@ export default function CollectionScreen() {
   }
 
   const formatPrice = (p: number) => (p ? `$${(p / 100).toFixed(0)}` : "—");
+  const formatXlm = (p: number) =>
+    xlmPrice ? `${(p / 100 / xlmPrice).toFixed(0)} XLM` : null;
   const activeCount = Object.values(filters).flat().length;
 
   const silhouettes = getOptions("silhouette");
@@ -529,7 +490,6 @@ export default function CollectionScreen() {
     filterKey: keyof Filters,
   ) {
     if (!values.length) return null;
-
     return (
       <View style={s.filterSection}>
         <Text style={s.filterSectionLbl}>{title}</Text>
@@ -554,6 +514,10 @@ export default function CollectionScreen() {
       .join("")
       .substring(0, 2)
       .toUpperCase();
+    const xlmEquiv =
+      item.listed && !item.sold && item.price_usdc
+        ? formatXlm(item.price_usdc)
+        : null;
 
     return (
       <TouchableOpacity
@@ -573,43 +537,35 @@ export default function CollectionScreen() {
           ) : (
             <Text style={s.cardInit}>{init}</Text>
           )}
-
           <View style={s.imgOverlay} />
-
           <View style={s.tokenBadge}>
             <Text style={s.tokenBadgeTxt}>Edition #{item.tokenId}</Text>
           </View>
-
           {!item.sold && item.edition_type ? (
             <View style={s.editionBadge}>
               <Text style={s.editionBadgeTxt}>{item.edition_type}</Text>
             </View>
           ) : null}
-
           {!item.sold ? (
             <View style={s.listedBadge}>
               <Text style={s.listedBadgeTxt}>✦ Listed</Text>
             </View>
           ) : null}
-
           {item.sold ? (
             <View style={s.soldBadge}>
               <Text style={s.soldBadgeTxt}>Sold · Make Offer</Text>
             </View>
           ) : null}
-
           {item.nfc_chip_id ? (
             <View style={s.nfcBadge}>
               <Text style={s.nfcBadgeTxt}>✦ NFC</Text>
             </View>
           ) : null}
-
           {!!item.rarity_rank && (
             <View style={s.rarityBadge}>
               <Text style={s.rarityBadgeTxt}>{item.rarity_label}</Text>
             </View>
           )}
-
           {!!item.rarity_rank && (
             <View style={s.rarityRankBadge}>
               <Text style={s.rarityBadgeTxt}>
@@ -639,7 +595,9 @@ export default function CollectionScreen() {
         <View style={s.cardFoot}>
           <View>
             <Text style={s.cardPrice}>{formatPrice(item.price_usdc)}</Text>
-            <Text style={s.cardCurrency}>USDC</Text>
+            <Text style={s.cardCurrency}>USD</Text>
+            {/* ── XLM equivalent — only on listed bags ── */}
+            {xlmEquiv ? <Text style={s.cardXlm}>{xlmEquiv}</Text> : null}
           </View>
 
           {!item.sold ? (
@@ -715,7 +673,6 @@ export default function CollectionScreen() {
                 The <Text style={s.navTitleEm}>Collection</Text>
               </Text>
             </View>
-
             <TouchableOpacity
               onPress={() => router.back()}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -730,7 +687,7 @@ export default function CollectionScreen() {
             {[
               { v: String(stats.total), l: "Total Minted" },
               { v: String(stats.listed), l: "Listed" },
-              { v: "Testnet", l: "Network" },
+              { v: xlmPrice ? `$${xlmPrice.toFixed(4)}` : "—", l: "XLM / USD" },
               { v: "Stellar", l: "Blockchain" },
             ].map(({ v, l }) => (
               <View key={l} style={s.statCell}>
@@ -749,7 +706,6 @@ export default function CollectionScreen() {
               </Text>{" "}
               pieces
             </Text>
-
             <View style={s.toolRight}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {(
@@ -772,7 +728,6 @@ export default function CollectionScreen() {
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-
               <TouchableOpacity
                 style={[s.filterBtn, activeCount > 0 && s.filterBtnOn]}
                 onPress={() => setFilterOpen(true)}
@@ -866,7 +821,6 @@ export default function CollectionScreen() {
       >
         <View style={s.filterModal}>
           <View style={s.filterHandle} />
-
           <SafeAreaView edges={["top"]}>
             <View style={s.filterHead}>
               <Text style={s.filterTitle}>Filter Pieces</Text>
@@ -875,12 +829,10 @@ export default function CollectionScreen() {
               </TouchableOpacity>
             </View>
           </SafeAreaView>
-
           <ScrollView showsVerticalScrollIndicator={false}>
             {renderTraitSection("Silhouette", silhouettes, "silhouette")}
             {renderTraitSection("Model", models, "model")}
             {renderTraitSection("Edition Type", editions, "edition_type")}
-
             <View style={s.filterSection}>
               <Text style={s.filterSectionLbl}>Rarity</Text>
               <View style={s.chips}>
@@ -901,7 +853,6 @@ export default function CollectionScreen() {
                 />
               </View>
             </View>
-
             <View style={s.filterSection}>
               <Text style={s.filterSectionLbl}>Status</Text>
               <View style={s.chips}>
@@ -917,7 +868,6 @@ export default function CollectionScreen() {
                 />
               </View>
             </View>
-
             <View style={s.filterSection}>
               <Text style={s.filterSectionLbl}>Price Range</Text>
               <View style={s.chips}>
@@ -938,7 +888,6 @@ export default function CollectionScreen() {
                 />
               </View>
             </View>
-
             {renderTraitSection(
               "Primary Color",
               primaryColors,
@@ -1002,7 +951,6 @@ export default function CollectionScreen() {
               designYearOptions,
               "design_year",
             )}
-
             {activeCount > 0 && (
               <TouchableOpacity
                 style={s.clearBtn}
@@ -1014,7 +962,6 @@ export default function CollectionScreen() {
                 <Text style={s.clearBtnTxt}>✕ Clear All Filters</Text>
               </TouchableOpacity>
             )}
-
             <View style={{ height: 40 }} />
           </ScrollView>
         </View>
@@ -1023,12 +970,10 @@ export default function CollectionScreen() {
   );
 }
 
-// ── Styles — mirrors index.tsx conventions exactly ────────────
 const GAP = 2;
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.black },
-
   navSafe: {
     backgroundColor: C.charcoal,
     borderBottomWidth: 1,
@@ -1055,7 +1000,6 @@ const s = StyleSheet.create({
   },
   navTitleEm: { fontStyle: "italic", fontWeight: "400", color: C.goldLt },
   navBack: { fontSize: 11, color: C.muted, letterSpacing: 0.5 },
-
   statsBar: {
     flexDirection: "row",
     borderTopWidth: 1,
@@ -1081,7 +1025,6 @@ const s = StyleSheet.create({
     color: C.muted,
     marginTop: 2,
   },
-
   toolbar: {
     flexDirection: "row",
     alignItems: "center",
@@ -1120,7 +1063,6 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.muted,
   },
-
   center: {
     flex: 1,
     alignItems: "center",
@@ -1161,10 +1103,8 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.gold,
   },
-
   grid: { padding: GAP, paddingBottom: 32 },
   row: { gap: GAP, marginBottom: GAP },
-
   card: {
     flex: 1,
     backgroundColor: C.charcoal,
@@ -1189,7 +1129,6 @@ const s = StyleSheet.create({
     fontWeight: "900",
     color: "rgba(184,150,62,0.1)",
   },
-
   tokenBadge: {
     position: "absolute",
     top: 8,
@@ -1299,7 +1238,6 @@ const s = StyleSheet.create({
     color: C.goldLt,
     fontWeight: "700",
   },
-
   cardBody: { padding: 10 },
   cardSilhouette: {
     fontSize: 7,
@@ -1323,7 +1261,6 @@ const s = StyleSheet.create({
     color: C.goldLt,
     letterSpacing: 0.3,
   },
-
   cardFoot: {
     flexDirection: "row",
     alignItems: "center",
@@ -1347,6 +1284,7 @@ const s = StyleSheet.create({
     color: C.muted,
     marginTop: 1,
   },
+  cardXlm: { fontSize: 9, color: C.gold, letterSpacing: 1, marginTop: 3 },
   buyBtn: {
     backgroundColor: C.black,
     paddingHorizontal: 10,
@@ -1373,7 +1311,6 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.red,
   },
-
   filterModal: { flex: 1, backgroundColor: C.black },
   filterHandle: {
     width: 40,
