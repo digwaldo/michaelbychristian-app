@@ -181,8 +181,8 @@ export default function PieceScreen() {
   // Offer modal
   const [offerVisible, setOfferVisible] = useState(false);
 
-  // XLM price
-  const [xlmPrice, setXlmPrice] = useState<number | null>(null);
+  // XLM gain for sold items
+  const [gainPercent, setGainPercent] = useState<number | null>(null);
 
   const fadeIn = useRef(new Animated.Value(0)).current;
 
@@ -194,16 +194,16 @@ export default function PieceScreen() {
     setPageState("loading");
     setError(null);
     try {
-      const [tokenData, soldRes, xlmRes] = await Promise.all([
+      const [tokenData, soldRes, gainsRes] = await Promise.all([
         loadTokenFromStellar(tokenId),
         fetch(`${BACKEND}/api/check-sold?token_id=${tokenId}`)
           .then((r) => r.json())
           .catch(() => ({ sold: false })),
-        fetch(`${BACKEND}/api/xlm-price`)
+        fetch(`${BACKEND}/api/sold-gains`)
           .then((r) => r.json())
           .catch(() => null),
       ]);
-      if (xlmRes?.price) setXlmPrice(xlmRes.price);
+      if (gainsRes?.gains?.[tokenId]) setGainPercent(gainsRes.gains[tokenId]);
 
       setData(tokenData);
       setSaleData(soldRes);
@@ -308,10 +308,7 @@ export default function PieceScreen() {
   const price = data?.price_usdc
     ? `${(data.price_usdc / 100).toFixed(0)}`
     : "—";
-  const xlmEquiv =
-    data?.price_usdc && xlmPrice
-      ? `${(data.price_usdc / 100 / xlmPrice).toFixed(0)} XLM`
-      : null;
+
   const init = (data?.name || "MB")
     .split(" ")
     .map((w: string) => w[0])
@@ -462,7 +459,6 @@ export default function PieceScreen() {
                 <>
                   <Text style={s.priceVal}>{price}</Text>
                   <Text style={s.priceLbl}>USD</Text>
-                  {xlmEquiv ? <Text style={s.xlmPrice}>{xlmEquiv}</Text> : null}
                 </>
               ) : (
                 <>
@@ -559,6 +555,12 @@ export default function PieceScreen() {
               <Text style={s.claimTitle}>
                 Claim Your Authentication Contract
               </Text>
+              {gainPercent ? (
+                <View style={s.gainRow}>
+                  <Text style={s.gainLabel}>Contract Gain</Text>
+                  <Text style={s.gainVal}>↑ {gainPercent}%</Text>
+                </View>
+              ) : null}
               <Text style={s.claimSub}>
                 This piece has been purchased. If you are the buyer, enter your
                 email to claim your NFT.
@@ -677,6 +679,16 @@ export default function PieceScreen() {
                   ✦ Claimed On-Chain
                 </Text>
               </View>
+              {gainPercent ? (
+                <View style={s.ownerRow}>
+                  <Text style={s.ownerLabel}>Contract Gain</Text>
+                  <Text
+                    style={[s.ownerVal, { color: C.green, fontWeight: "700" }]}
+                  >
+                    ↑ {gainPercent}%
+                  </Text>
+                </View>
+              ) : null}
               <TouchableOpacity
                 style={s.offerBtnRow}
                 onPress={() => setOfferVisible(true)}
@@ -1182,7 +1194,22 @@ const s = StyleSheet.create({
     color: C.muted,
     marginBottom: 2,
   },
-  xlmPrice: { fontSize: 9, color: C.gold, letterSpacing: 1, marginTop: 4 },
+  gainRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  gainLabel: {
+    fontSize: 9,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: C.muted,
+  },
+  gainVal: { fontSize: 13, color: C.green, fontWeight: "700" },
 
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 24 },
   chip: {

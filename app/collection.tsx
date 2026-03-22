@@ -276,8 +276,8 @@ export default function CollectionScreen() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [stats, setStats] = useState({ total: 0, listed: 0 });
 
-  // ── XLM price state ───────────────────────────────────────────
-  const [xlmPrice, setXlmPrice] = useState<number | null>(null);
+  // ── Sold gains state ──────────────────────────────────────────
+  const [soldGains, setSoldGains] = useState<Record<number, number>>({});
 
   const sidePad = isPhone ? 18 : 24;
   const maxW = isWeb ? 900 : undefined;
@@ -288,11 +288,11 @@ export default function CollectionScreen() {
       if (!isRefresh) setLoading(true);
       setError(null);
 
-      // ── Fetch XLM price + KV sold list in parallel ────────────
-      fetch(`${BACKEND}/api/xlm-price`)
+      // ── Fetch sold gains in background ────────────────────────
+      fetch(`${BACKEND}/api/sold-gains`)
         .then((r) => r.json())
         .then((d) => {
-          if (d?.price) setXlmPrice(d.price);
+          if (d?.gains) setSoldGains(d.gains);
         })
         .catch(() => null);
 
@@ -461,8 +461,7 @@ export default function CollectionScreen() {
   }
 
   const formatPrice = (p: number) => (p ? `$${(p / 100).toFixed(0)}` : "—");
-  const formatXlm = (p: number) =>
-    xlmPrice ? `${(p / 100 / xlmPrice).toFixed(0)} XLM` : null;
+
   const activeCount = Object.values(filters).flat().length;
 
   const silhouettes = getOptions("silhouette");
@@ -514,10 +513,8 @@ export default function CollectionScreen() {
       .join("")
       .substring(0, 2)
       .toUpperCase();
-    const xlmEquiv =
-      item.listed && !item.sold && item.price_usdc
-        ? formatXlm(item.price_usdc)
-        : null;
+    const gainPercent =
+      item.sold && soldGains[item.tokenId] ? soldGains[item.tokenId] : null;
 
     return (
       <TouchableOpacity
@@ -554,6 +551,11 @@ export default function CollectionScreen() {
           {item.sold ? (
             <View style={s.soldBadge}>
               <Text style={s.soldBadgeTxt}>Sold · Make Offer</Text>
+            </View>
+          ) : null}
+          {gainPercent ? (
+            <View style={s.gainBadge}>
+              <Text style={s.gainBadgeTxt}>↑ {gainPercent}%</Text>
             </View>
           ) : null}
           {item.nfc_chip_id ? (
@@ -596,8 +598,6 @@ export default function CollectionScreen() {
           <View>
             <Text style={s.cardPrice}>{formatPrice(item.price_usdc)}</Text>
             <Text style={s.cardCurrency}>USD</Text>
-            {/* ── XLM equivalent — only on listed bags ── */}
-            {xlmEquiv ? <Text style={s.cardXlm}>{xlmEquiv}</Text> : null}
           </View>
 
           {!item.sold ? (
@@ -687,7 +687,7 @@ export default function CollectionScreen() {
             {[
               { v: String(stats.total), l: "Total Minted" },
               { v: String(stats.listed), l: "Listed" },
-              { v: xlmPrice ? `$${xlmPrice.toFixed(4)}` : "—", l: "XLM / USD" },
+              { v: "Testnet", l: "Network" },
               { v: "Stellar", l: "Blockchain" },
             ].map(({ v, l }) => (
               <View key={l} style={s.statCell}>
@@ -1284,7 +1284,29 @@ const s = StyleSheet.create({
     color: C.muted,
     marginTop: 1,
   },
-  cardXlm: { fontSize: 9, color: C.gold, letterSpacing: 1, marginTop: 3 },
+  gainBadge: {
+    position: "absolute",
+    top: 58,
+    left: 8,
+    backgroundColor: "rgba(91,175,133,0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(91,175,133,0.55)",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  gainBadgeTxt: {
+    fontSize: 7,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: C.green,
+    fontWeight: "700",
+  },
+  cardSoldTxt: {
+    fontSize: 9,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.muted,
+  },
   buyBtn: {
     backgroundColor: C.black,
     paddingHorizontal: 10,
