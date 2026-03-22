@@ -3,6 +3,11 @@
 // No contract-client dependency needed
 
 const Stripe = require("stripe");
+
+// Patch BigInt serialization globally — Stellar SDK uses BigInt internally
+BigInt.prototype.toJSON = function () {
+  return this.toString();
+};
 const { isTokenSold } = require("./mark-sold");
 const StellarSdk = require("@stellar/stellar-sdk");
 const {
@@ -50,7 +55,9 @@ async function simulate(fn, args = []) {
 
   const sim = await server.simulateTransaction(tx);
   if (!rpc.Api.isSimulationSuccess(sim)) {
-    const errDetail = JSON.stringify(sim).slice(0, 300);
+    const errDetail = JSON.stringify(sim, (_, v) =>
+      typeof v === "bigint" ? v.toString() : v,
+    ).slice(0, 300);
     console.error(`Simulation failed for ${fn}:`, errDetail);
     throw new Error(`Simulation failed for ${fn}: ${errDetail}`);
   }
@@ -198,6 +205,6 @@ module.exports = async (req, res) => {
     return res.status(200).json({ sessionId: session.id, url: session.url });
   } catch (err) {
     console.error("Checkout error:", err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: String(err.message) });
   }
 };
