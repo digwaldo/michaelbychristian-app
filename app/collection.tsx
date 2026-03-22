@@ -275,8 +275,6 @@ export default function CollectionScreen() {
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [filterOpen, setFilterOpen] = useState(false);
   const [stats, setStats] = useState({ total: 0, listed: 0 });
-
-  // ── Sold gains state ──────────────────────────────────────────
   const [soldGains, setSoldGains] = useState<Record<number, number>>({});
 
   const sidePad = isPhone ? 18 : 24;
@@ -288,7 +286,6 @@ export default function CollectionScreen() {
       if (!isRefresh) setLoading(true);
       setError(null);
 
-      // ── Fetch sold gains in background ────────────────────────
       fetch(`${BACKEND}/api/sold-gains`)
         .then((r) => r.json())
         .then((d) => {
@@ -364,7 +361,7 @@ export default function CollectionScreen() {
               trait_count: 0,
             });
           } catch {
-            /* skip failed tokens */
+            /* skip */
           }
         }
 
@@ -461,7 +458,6 @@ export default function CollectionScreen() {
   }
 
   const formatPrice = (p: number) => (p ? `$${(p / 100).toFixed(0)}` : "—");
-
   const activeCount = Object.values(filters).flat().length;
 
   const silhouettes = getOptions("silhouette");
@@ -594,12 +590,16 @@ export default function CollectionScreen() {
           </Text>
         </View>
 
+        {/* ── Card footer — hide price when sold ── */}
         <View style={s.cardFoot}>
-          <View>
-            <Text style={s.cardPrice}>{formatPrice(item.price_usdc)}</Text>
-            <Text style={s.cardCurrency}>USD</Text>
-          </View>
-
+          {!item.sold ? (
+            <View>
+              <Text style={s.cardPrice}>{formatPrice(item.price_usdc)}</Text>
+              <Text style={s.cardCurrency}>USD</Text>
+            </View>
+          ) : (
+            <View />
+          )}
           {!item.sold ? (
             <TouchableOpacity
               style={s.buyBtn}
@@ -1195,6 +1195,23 @@ const s = StyleSheet.create({
     color: C.red,
     fontWeight: "600",
   },
+  gainBadge: {
+    position: "absolute",
+    top: 58,
+    left: 8,
+    backgroundColor: "rgba(91,175,133,0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(91,175,133,0.55)",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  gainBadgeTxt: {
+    fontSize: 7,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: C.green,
+    fontWeight: "700",
+  },
   nfcBadge: {
     position: "absolute",
     bottom: 8,
@@ -1283,29 +1300,6 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.muted,
     marginTop: 1,
-  },
-  gainBadge: {
-    position: "absolute",
-    top: 58,
-    left: 8,
-    backgroundColor: "rgba(91,175,133,0.2)",
-    borderWidth: 1,
-    borderColor: "rgba(91,175,133,0.55)",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-  },
-  gainBadgeTxt: {
-    fontSize: 7,
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
-    color: C.green,
-    fontWeight: "700",
-  },
-  cardSoldTxt: {
-    fontSize: 9,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: C.muted,
   },
   buyBtn: {
     backgroundColor: C.black,
