@@ -1,6 +1,6 @@
-// app/piece/[id].tsx — Bag Detail + Stripe Checkout
-// Reads bag data directly from Stellar contract (client-side, same as collection.tsx)
-// Purchase goes through /api/create-checkout — server verifies ownership, then Stripe charges
+// app/piece/[id].tsx
+// Reads bag data from Stellar + sale/claim state from KV
+// States: listed (buy now) | sold+unclaimed (claim NFT) | sold+claimed (ownership view)
 
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -10,21 +10,30 @@ import {
   Dimensions,
   Image,
   Linking,
+  Modal,
   Platform,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { BACKEND, C, CONTRACT, PASSPHRASE, RPC_URL } from "../../lib/theme";
+import {
+  ADMIN_WALLET,
+  BACKEND,
+  C,
+  CONTRACT,
+  EXPLORER,
+  PASSPHRASE,
+  RPC_URL,
+} from "../../lib/theme";
 
 const { width } = Dimensions.get("window");
 const IS_WEB = Platform.OS === "web";
 const MAX_W = IS_WEB ? 760 : undefined;
 
-// ── Read bag data from Stellar contract (client-side) ─────────
-// Same pattern as collection.tsx — no wallet needed, just simulates read calls
+// ── Stellar read ──────────────────────────────────────────────
 async function loadTokenFromStellar(tokenId: number) {
   const Sdk = await import("@stellar/stellar-sdk" as any);
   const server = new Sdk.rpc.Server(RPC_URL);
@@ -46,16 +55,43 @@ async function loadTokenFromStellar(tokenId: number) {
     return Sdk.scValToNative(sim.result.retval);
   }
 
-  const raw = await simulate("full_token_data", [
-    Sdk.nativeToScVal(tokenId, { type: "u64" }),
+  const tokenArg = Sdk.nativeToScVal(tokenId, { type: "u64" });
+
+  const [raw, ownerRaw] = await Promise.all([
+    simulate("full_token_data", [tokenArg]),
+    simulate("owner_of", [tokenArg]).catch(() => null),
   ]);
 
   const t = raw.traits || {};
+  const owner = ownerRaw ? String(ownerRaw).trim() : null;
+  const ownedByAdmin =
+    !owner || owner.toUpperCase() === ADMIN_WALLET.toUpperCase();
+
+  // Build activity from on-chain data
+  const activity = [];
+  if (raw.minted_at || raw.tailored_year) {
+    activity.push({
+      type: "Minted",
+      date:
+        raw.minted_at || `${raw.tailored_year || raw.design_year || "2026"}`,
+      detail: "Token created on Stellar",
+    });
+  }
+  if (!ownedByAdmin && owner) {
+    activity.push({
+      type: "Transferred",
+      date: raw.transferred_at || "Recent",
+      detail: `To ${owner.slice(0, 8)}...${owner.slice(-6)}`,
+    });
+  }
+
   return {
     name: raw.name || `MBC Token #${tokenId}`,
     image: raw.image || "",
     price_usdc: raw.price_usdc ? Number(raw.price_usdc) : 0,
     listed: raw.listed !== false,
+    owner,
+    ownedByAdmin,
     silhouette: t.silhouette || raw.silhouette || "",
     model: t.model || raw.model || "",
     edition_type: t.edition_type || raw.edition_type || "",
@@ -77,6 +113,7 @@ async function loadTokenFromStellar(tokenId: number) {
     archive_status: t.archive_status || raw.archive_status || "",
     tailored_year: Number(t.tailored_year || raw.tailored_year || 0),
     design_year: Number(t.design_year || raw.design_year || 0),
+    activity,
   };
 }
 
@@ -112,18 +149,37 @@ const TRAITS: [string, string][] = [
 ];
 
 type BuyStep = "idle" | "checking" | "redirecting" | "unavailable" | "error";
+type ClaimStep = "idle" | "submitting" | "success" | "error";
+type PageState =
+  | "loading"
+  | "listed"
+  | "sold_unclaimed"
+  | "sold_claimed"
+  | "error";
 
-// ── Component ─────────────────────────────────────────────────
 export default function PieceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const tokenId = Number(id);
 
   const [data, setData] = useState<any | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [pageState, setPageState] = useState<PageState>("loading");
+  const [saleData, setSaleData] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [imgErr, setImgErr] = useState(false);
+
+  // Buy state
   const [buyStep, setBuyStep] = useState<BuyStep>("idle");
   const [buyError, setBuyError] = useState("");
+
+  // Claim state
+  const [claimStep, setClaimStep] = useState<ClaimStep>("idle");
+  const [claimEmail, setClaimEmail] = useState("");
+  const [claimWallet, setClaimWallet] = useState("");
+  const [claimResult, setClaimResult] = useState<any | null>(null);
+  const [claimError, setClaimError] = useState("");
+
+  // Offer modal
+  const [offerVisible, setOfferVisible] = useState(false);
 
   const fadeIn = useRef(new Animated.Value(0)).current;
 
@@ -132,11 +188,27 @@ export default function PieceScreen() {
   }, [tokenId]);
 
   async function load() {
-    setLoading(true);
+    setPageState("loading");
     setError(null);
     try {
-      const bagData = await loadTokenFromStellar(tokenId);
-      setData(bagData);
+      const [tokenData, soldRes] = await Promise.all([
+        loadTokenFromStellar(tokenId),
+        fetch(`${BACKEND}/api/check-sold?token_id=${tokenId}`)
+          .then((r) => r.json())
+          .catch(() => ({ sold: false })),
+      ]);
+
+      setData(tokenData);
+      setSaleData(soldRes);
+
+      if (soldRes.sold && soldRes.claimed) {
+        setPageState("sold_claimed");
+      } else if (soldRes.sold && !soldRes.claimed) {
+        setPageState("sold_unclaimed");
+      } else {
+        setPageState("listed");
+      }
+
       Animated.timing(fadeIn, {
         toValue: 1,
         duration: 400,
@@ -144,12 +216,11 @@ export default function PieceScreen() {
       }).start();
     } catch (e: any) {
       setError(e.message);
-    } finally {
-      setLoading(false);
+      setPageState("error");
     }
   }
 
-  // ── Buy — hits /api/create-checkout, server re-checks ownership on Stellar
+  // ── Buy ───────────────────────────────────────────────────────
   async function buyNFT() {
     setBuyStep("checking");
     setBuyError("");
@@ -165,29 +236,64 @@ export default function PieceScreen() {
           cancelUrl: IS_WEB ? window.location.href : `${BACKEND}/`,
         }),
       });
-
-      const data = await res.json();
-
-      if (data.url) {
+      const json = await res.json();
+      if (json.url) {
         setBuyStep("redirecting");
-        if (IS_WEB) {
-          window.location.href = data.url;
-        } else {
-          await Linking.openURL(data.url);
+        if (IS_WEB) window.location.href = json.url;
+        else {
+          await Linking.openURL(json.url);
           setBuyStep("idle");
         }
-      } else if (data.unavailable) {
+      } else if (json.unavailable) {
         setBuyStep("unavailable");
         setBuyError(
           "This piece is no longer available. No charge has been made.",
         );
       } else {
         setBuyStep("error");
-        setBuyError(data.error || "Could not open checkout. Please try again.");
+        setBuyError(json.error || "Could not open checkout. Please try again.");
       }
     } catch (e: any) {
       setBuyStep("error");
       setBuyError(e.message || "Network error. Please try again.");
+    }
+  }
+
+  // ── Claim ─────────────────────────────────────────────────────
+  async function submitClaim() {
+    if (!claimEmail.trim()) {
+      setClaimError("Please enter your email");
+      return;
+    }
+    setClaimStep("submitting");
+    setClaimError("");
+    try {
+      const res = await fetch(`${BACKEND}/api/claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tokenId: String(tokenId),
+          buyerEmail: claimEmail.trim(),
+          walletAddress: claimWallet.trim() || null,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setClaimResult(json);
+        setClaimStep("success");
+        setSaleData({
+          ...saleData,
+          claimed: true,
+          buyerWallet: json.buyerWallet,
+        });
+        setPageState("sold_claimed");
+      } else {
+        setClaimStep("error");
+        setClaimError(json.error || "Claim failed. Please try again.");
+      }
+    } catch (e: any) {
+      setClaimStep("error");
+      setClaimError(e.message || "Network error.");
     }
   }
 
@@ -201,22 +307,15 @@ export default function PieceScreen() {
     .join("")
     .substring(0, 2)
     .toUpperCase();
-
-  const buyLabel = {
-    idle: `Purchase This Piece  —  ${price}`,
-    checking: "Checking availability...",
-    redirecting: "Redirecting to Stripe...",
-    unavailable: "No Longer Available",
-    error: "Try Again",
-  }[buyStep];
+  const short = (a: string) => (a ? `${a.slice(0, 8)}...${a.slice(-6)}` : "—");
 
   const buyDisabled =
     buyStep === "checking" ||
     buyStep === "redirecting" ||
     buyStep === "unavailable";
 
-  // ── Loading / Error screens ────────────────────────────────
-  if (loading)
+  // ── Loading ───────────────────────────────────────────────────
+  if (pageState === "loading")
     return (
       <View style={s.screen}>
         <ActivityIndicator color={C.gold} size="large" />
@@ -224,7 +323,7 @@ export default function PieceScreen() {
       </View>
     );
 
-  if (error || !data)
+  if (pageState === "error" || !data)
     return (
       <View style={s.screen}>
         <Text style={s.errTitle}>Could not load piece</Text>
@@ -303,13 +402,21 @@ export default function PieceScreen() {
               <Text style={s.nfcBadgeTxt}>✦ NFC Verified</Text>
             </View>
           ) : null}
-          {data.listed ? (
+
+          {/* ── Status badge ── */}
+          {pageState === "listed" && (
             <View style={s.listedBadge}>
               <Text style={s.listedBadgeTxt}>Listed</Text>
             </View>
-          ) : (
+          )}
+          {pageState === "sold_unclaimed" && (
             <View style={s.soldBadge}>
-              <Text style={s.soldBadgeTxt}>Sold</Text>
+              <Text style={s.soldBadgeTxt}>Sold · NFT Unclaimed</Text>
+            </View>
+          )}
+          {pageState === "sold_claimed" && (
+            <View style={s.claimedBadge}>
+              <Text style={s.claimedBadgeTxt}>✦ NFT Claimed</Text>
             </View>
           )}
         </View>
@@ -340,8 +447,18 @@ export default function PieceScreen() {
               ) : null}
             </View>
             <View style={s.priceBox}>
-              <Text style={s.priceVal}>{price}</Text>
-              <Text style={s.priceLbl}>USD</Text>
+              {pageState === "listed" ? (
+                <>
+                  <Text style={s.priceVal}>{price}</Text>
+                  <Text style={s.priceLbl}>USD</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={s.lastSaleLbl}>Last Sale</Text>
+                  <Text style={s.priceVal}>{price}</Text>
+                  <Text style={s.priceLbl}>USD</Text>
+                </>
+              )}
             </View>
           </View>
 
@@ -361,8 +478,8 @@ export default function PieceScreen() {
               ))}
           </View>
 
-          {/* ── BUY BUTTON ── */}
-          {data.listed ? (
+          {/* ── PAGE STATE: LISTED — Buy button ── */}
+          {pageState === "listed" && (
             <>
               <TouchableOpacity
                 style={[s.buyBtn, buyDisabled && s.buyBtnDisabled]}
@@ -379,13 +496,22 @@ export default function PieceScreen() {
                     }}
                   >
                     <ActivityIndicator color={C.black} size="small" />
-                    <Text style={s.buyBtnTxt}>{buyLabel}</Text>
+                    <Text style={s.buyBtnTxt}>
+                      {buyStep === "checking"
+                        ? "Checking availability..."
+                        : "Redirecting to Stripe..."}
+                    </Text>
                   </View>
                 ) : (
-                  <Text style={s.buyBtnTxt}>{buyLabel}</Text>
+                  <Text style={s.buyBtnTxt}>
+                    {buyStep === "unavailable"
+                      ? "No Longer Available"
+                      : buyStep === "error"
+                        ? "Try Again"
+                        : `Purchase This Piece  —  ${price}`}
+                  </Text>
                 )}
               </TouchableOpacity>
-
               {(buyStep === "error" || buyStep === "unavailable") && (
                 <View
                   style={[
@@ -408,19 +534,221 @@ export default function PieceScreen() {
                   )}
                 </View>
               )}
-
               <Text style={s.buyNote}>
-                💳 Card · 🍎 Apple Pay · G Google Pay{"\n"}
-                Secure checkout powered by Stripe
+                💳 Card · 🍎 Apple Pay · G Google Pay{"\n"}Secure checkout
+                powered by Stripe
               </Text>
             </>
-          ) : (
-            <View style={s.soldBtn}>
-              <Text style={s.soldBtnTxt}>This Piece Has Been Sold</Text>
+          )}
+
+          {/* ── PAGE STATE: SOLD + UNCLAIMED — Claim section ── */}
+          {pageState === "sold_unclaimed" && (
+            <View style={s.claimBox}>
+              <Text style={s.claimTitle}>
+                Claim Your Authentication Contract
+              </Text>
+              <Text style={s.claimSub}>
+                This piece has been purchased. If you are the buyer, enter your
+                email to claim your NFT.
+              </Text>
+
+              {claimStep === "success" ? (
+                <View style={s.claimSuccess}>
+                  <Text style={s.claimSuccessTitle}>
+                    ✓ NFT Claimed Successfully
+                  </Text>
+                  <Text style={s.claimSuccessSub}>
+                    Token #{tokenId} has been transferred to your Stellar
+                    wallet.
+                    {claimResult?.isCustodial
+                      ? " Wallet details sent to your email."
+                      : ""}
+                  </Text>
+                  {claimResult?.txHash && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        const url = `${EXPLORER}/tx/${claimResult.txHash}`;
+                        if (IS_WEB) window.open(url, "_blank");
+                        else Linking.openURL(url);
+                      }}
+                    >
+                      <Text style={s.txLink}>View Transaction ↗</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : (
+                <>
+                  <TextInput
+                    style={s.claimInput}
+                    placeholder="Your email address"
+                    placeholderTextColor={C.muted}
+                    value={claimEmail}
+                    onChangeText={setClaimEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                  <TextInput
+                    style={s.claimInput}
+                    placeholder="Stellar wallet address (optional — we'll create one for you)"
+                    placeholderTextColor={C.muted}
+                    value={claimWallet}
+                    onChangeText={setClaimWallet}
+                    autoCapitalize="none"
+                  />
+                  {claimError ? (
+                    <Text style={s.claimError}>{claimError}</Text>
+                  ) : null}
+                  <TouchableOpacity
+                    style={[
+                      s.claimBtn,
+                      claimStep === "submitting" && s.buyBtnDisabled,
+                    ]}
+                    onPress={submitClaim}
+                    disabled={claimStep === "submitting"}
+                    activeOpacity={0.85}
+                  >
+                    {claimStep === "submitting" ? (
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 10,
+                        }}
+                      >
+                        <ActivityIndicator color={C.black} size="small" />
+                        <Text style={s.buyBtnTxt}>Claiming...</Text>
+                      </View>
+                    ) : (
+                      <Text style={s.buyBtnTxt}>Claim NFT →</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
+
+              <TouchableOpacity
+                style={s.offerBtnRow}
+                onPress={() => setOfferVisible(true)}
+              >
+                <Text style={s.offerBtnTxt}>Make an Offer</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* ── PAGE STATE: SOLD + CLAIMED — Ownership view ── */}
+          {pageState === "sold_claimed" && (
+            <View style={s.ownerBox}>
+              <View style={s.ownerRow}>
+                <Text style={s.ownerLabel}>Owner</Text>
+                <Text style={s.ownerVal}>
+                  {saleData?.buyerWallet
+                    ? short(saleData.buyerWallet)
+                    : "Verified Owner"}
+                </Text>
+              </View>
+              {saleData?.soldAt && (
+                <View style={s.ownerRow}>
+                  <Text style={s.ownerLabel}>Acquired</Text>
+                  <Text style={s.ownerVal}>
+                    {new Date(saleData.soldAt).toLocaleDateString()}
+                  </Text>
+                </View>
+              )}
+              <View style={s.ownerRow}>
+                <Text style={s.ownerLabel}>Last Sale</Text>
+                <Text style={[s.ownerVal, { color: C.goldLt }]}>
+                  {price} USD
+                </Text>
+              </View>
+              <View style={s.ownerRow}>
+                <Text style={s.ownerLabel}>NFT Status</Text>
+                <Text style={[s.ownerVal, { color: C.green }]}>
+                  ✦ Claimed On-Chain
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={s.offerBtnRow}
+                onPress={() => setOfferVisible(true)}
+              >
+                <Text style={s.offerBtnTxt}>Make an Offer</Text>
+              </TouchableOpacity>
             </View>
           )}
 
           <View style={s.rule} />
+
+          {/* ── Activity section (shown when sold) ── */}
+          {(pageState === "sold_unclaimed" || pageState === "sold_claimed") && (
+            <>
+              <Text style={s.sectionLbl}>Activity</Text>
+              <View style={s.activityBox}>
+                {/* Mint event */}
+                <View style={s.activityRow}>
+                  <View style={s.activityDot} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.activityType}>Minted</Text>
+                    <Text style={s.activityDetail}>
+                      Token created on Stellar · Contract {short(CONTRACT)}
+                    </Text>
+                  </View>
+                  <Text style={s.activityDate}>
+                    {data.tailored_year || data.design_year || "2026"}
+                  </Text>
+                </View>
+                {/* Sale event */}
+                {saleData?.soldAt && (
+                  <View style={s.activityRow}>
+                    <View
+                      style={[s.activityDot, { backgroundColor: C.gold }]}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.activityType}>Sold</Text>
+                      <Text style={s.activityDetail}>
+                        Purchased via MBC · {price} USD
+                      </Text>
+                    </View>
+                    <Text style={s.activityDate}>
+                      {new Date(saleData.soldAt).toLocaleDateString()}
+                    </Text>
+                  </View>
+                )}
+                {/* Claim event */}
+                {saleData?.claimed && saleData?.claimedAt && (
+                  <View style={s.activityRow}>
+                    <View
+                      style={[s.activityDot, { backgroundColor: C.green }]}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.activityType}>NFT Claimed</Text>
+                      <Text style={s.activityDetail}>
+                        Transferred to{" "}
+                        {saleData.buyerWallet
+                          ? short(saleData.buyerWallet)
+                          : "owner wallet"}
+                      </Text>
+                    </View>
+                    <Text style={s.activityDate}>
+                      {new Date(saleData.claimedAt).toLocaleDateString()}
+                    </Text>
+                  </View>
+                )}
+                {/* Unclaimed note */}
+                {!saleData?.claimed && (
+                  <View style={s.activityRow}>
+                    <View
+                      style={[s.activityDot, { backgroundColor: C.muted }]}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.activityType, { color: C.muted }]}>
+                        NFT Transfer Pending
+                      </Text>
+                      <Text style={s.activityDetail}>Awaiting buyer claim</Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+              <View style={s.rule} />
+            </>
+          )}
 
           {/* ── Traits & Details ── */}
           <Text style={s.sectionLbl}>Traits & Details</Text>
@@ -437,12 +765,54 @@ export default function PieceScreen() {
             })}
           </View>
 
-          <View style={{ height: data.listed ? 100 : 48 }} />
+          {/* ── On-Chain Proof ── */}
+          <View style={s.rule} />
+          <Text style={s.sectionLbl}>On-Chain Proof</Text>
+          <View style={s.chainBox}>
+            {[
+              { k: "Contract", v: short(CONTRACT), mono: true },
+              { k: "Token ID", v: `#${tokenId}`, gold: true },
+              { k: "Standard", v: "Soroban NFT", mono: false },
+              { k: "Network", v: "Stellar · Testnet", gold: true },
+              {
+                k: "Owner",
+                v: data.owner ? short(data.owner) : "Admin",
+                mono: true,
+              },
+            ].map(({ k, v, gold, mono }) => (
+              <View key={k} style={s.chainRow}>
+                <Text style={s.chainKey}>{k}</Text>
+                <Text
+                  style={[
+                    s.chainVal,
+                    gold && { color: C.goldLt },
+                    mono && { fontFamily: "monospace" },
+                  ]}
+                >
+                  {v}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          <TouchableOpacity
+            style={s.explorerBtn}
+            activeOpacity={0.8}
+            onPress={() => {
+              const url = `${EXPLORER}/contract/${CONTRACT}`;
+              if (IS_WEB) window.open(url, "_blank");
+              else Linking.openURL(url);
+            }}
+          >
+            <Text style={s.explorerBtnTxt}>View on Stellar Explorer ↗</Text>
+          </TouchableOpacity>
+
+          <View style={{ height: 100 }} />
         </View>
       </Animated.ScrollView>
 
-      {/* ── Sticky buy bar ── */}
-      {data.listed && (
+      {/* ── Sticky bar ── */}
+      {pageState === "listed" && (
         <View style={s.stickyBar}>
           <SafeAreaView edges={["bottom"]}>
             <View
@@ -479,11 +849,112 @@ export default function PieceScreen() {
           </SafeAreaView>
         </View>
       )}
+
+      {pageState === "sold_unclaimed" && (
+        <View style={s.stickyBar}>
+          <SafeAreaView edges={["bottom"]}>
+            <View
+              style={[
+                s.stickyInner,
+                IS_WEB && {
+                  maxWidth: MAX_W,
+                  alignSelf: "center" as const,
+                  width: "100%",
+                },
+              ]}
+            >
+              <View style={{ flex: 1, marginRight: 16 }}>
+                <Text style={s.stickyName} numberOfLines={1}>
+                  {data.name}
+                </Text>
+                <Text style={[s.stickyPrice, { color: C.muted }]}>
+                  NFT Unclaimed
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={s.stickyBtnOffer}
+                onPress={() => setOfferVisible(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={s.stickyBtnOfferTxt}>Make Offer</Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        </View>
+      )}
+
+      {pageState === "sold_claimed" && (
+        <View style={s.stickyBar}>
+          <SafeAreaView edges={["bottom"]}>
+            <View
+              style={[
+                s.stickyInner,
+                IS_WEB && {
+                  maxWidth: MAX_W,
+                  alignSelf: "center" as const,
+                  width: "100%",
+                },
+              ]}
+            >
+              <View style={{ flex: 1, marginRight: 16 }}>
+                <Text style={s.stickyName} numberOfLines={1}>
+                  {data.name}
+                </Text>
+                <Text style={[s.stickyPrice, { color: C.green }]}>
+                  ✦ NFT Claimed
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={s.stickyBtnOffer}
+                onPress={() => setOfferVisible(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={s.stickyBtnOfferTxt}>Make Offer</Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        </View>
+      )}
+
+      {/* ── Make Offer Modal ── */}
+      <Modal
+        visible={offerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOfferVisible(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            <Text style={s.modalTitle}>Make an Offer</Text>
+            <Text style={s.modalSub}>
+              Offers are coming soon.{"\n"}Contact us to express interest in
+              this piece.
+            </Text>
+            <TouchableOpacity
+              style={s.modalBtn}
+              onPress={() => {
+                setOfferVisible(false);
+                Linking.openURL(
+                  `mailto:youngcompltd@gmail.com?subject=Offer for ${data.name} — Token #${tokenId}`,
+                );
+              }}
+            >
+              <Text style={s.modalBtnTxt}>Contact Us →</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setOfferVisible(false)}
+              style={{ marginTop: 12 }}
+            >
+              <Text style={s.modalClose}>Dismiss</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────
+// ── Styles ─────────────────────────────────────────────────────
 const IMG_H = IS_WEB ? 480 : width;
 
 const s = StyleSheet.create({
@@ -574,6 +1045,7 @@ const s = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(12,11,9,0.15)",
   },
+
   tokenBadge: {
     position: "absolute",
     bottom: 14,
@@ -638,9 +1110,24 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.red,
   },
+  claimedBadge: {
+    position: "absolute",
+    top: 14,
+    right: 16,
+    backgroundColor: "rgba(91,175,133,0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(91,175,133,0.5)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  claimedBadgeTxt: {
+    fontSize: 7,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.green,
+  },
 
   content: { backgroundColor: C.black, paddingHorizontal: 24, paddingTop: 28 },
-
   titleRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -676,6 +1163,13 @@ const s = StyleSheet.create({
     color: C.muted,
     marginTop: 2,
   },
+  lastSaleLbl: {
+    fontSize: 7,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.muted,
+    marginBottom: 2,
+  },
 
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 24 },
   chip: {
@@ -705,7 +1199,6 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.black,
   },
-
   buyErrorBox: {
     backgroundColor: "rgba(192,97,74,0.1)",
     borderWidth: 1,
@@ -722,7 +1215,6 @@ const s = StyleSheet.create({
   },
   buyErrorTxt: { fontSize: 12, color: C.red, flex: 1, lineHeight: 18 },
   buyErrorReset: { fontSize: 10, color: C.muted, marginLeft: 12 },
-
   buyNote: {
     fontSize: 10,
     color: C.muted,
@@ -730,16 +1222,89 @@ const s = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 4,
   },
-  soldBtn: {
+
+  claimBox: {
     borderWidth: 1,
     borderColor: C.border,
-    padding: 18,
+    padding: 20,
+    marginBottom: 10,
+    backgroundColor: C.charcoal,
+  },
+  claimTitle: {
+    fontSize: 11,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.gold,
+    marginBottom: 8,
+    fontWeight: "600",
+  },
+  claimSub: { fontSize: 12, color: C.muted, lineHeight: 18, marginBottom: 16 },
+  claimInput: {
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.warm,
+    color: C.cream,
+    fontSize: 13,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
+  },
+  claimBtn: {
+    backgroundColor: C.gold,
+    padding: 16,
     alignItems: "center",
     marginBottom: 10,
   },
-  soldBtnTxt: {
-    fontSize: 10,
-    letterSpacing: 2.5,
+  claimError: { fontSize: 12, color: C.red, marginBottom: 10 },
+  claimSuccess: {
+    backgroundColor: "rgba(91,175,133,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(91,175,133,0.4)",
+    padding: 16,
+  },
+  claimSuccessTitle: {
+    fontSize: 13,
+    color: C.green,
+    fontWeight: "600",
+    marginBottom: 6,
+  },
+  claimSuccessSub: { fontSize: 12, color: C.muted, lineHeight: 18 },
+  txLink: { fontSize: 11, color: C.gold, marginTop: 8 },
+
+  ownerBox: {
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.charcoal,
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  ownerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  ownerLabel: {
+    fontSize: 9,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: C.muted,
+  },
+  ownerVal: { fontSize: 12, color: C.cream, fontFamily: "monospace" },
+
+  offerBtnRow: {
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 14,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  offerBtnTxt: {
+    fontSize: 9,
+    letterSpacing: 2,
     textTransform: "uppercase",
     color: C.muted,
   },
@@ -753,6 +1318,38 @@ const s = StyleSheet.create({
     marginBottom: 16,
     fontWeight: "600",
   },
+
+  activityBox: {
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: "hidden",
+    marginBottom: 4,
+  },
+  activityRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    backgroundColor: C.charcoal,
+    gap: 12,
+  },
+  activityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: C.cream,
+    marginTop: 4,
+  },
+  activityType: {
+    fontSize: 11,
+    color: C.cream,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  activityDetail: { fontSize: 10, color: C.muted, letterSpacing: 0.3 },
+  activityDate: { fontSize: 10, color: C.muted },
 
   traitsBox: {
     borderWidth: 1,
@@ -785,6 +1382,43 @@ const s = StyleSheet.create({
     textAlign: "right",
   },
 
+  chainBox: {
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: "hidden",
+    backgroundColor: C.charcoal,
+    marginBottom: 16,
+  },
+  chainRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  chainKey: {
+    fontSize: 9,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: C.muted,
+  },
+  chainVal: { fontSize: 11, color: C.cream },
+  explorerBtn: {
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 14,
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  explorerBtnTxt: {
+    fontSize: 9,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.muted,
+  },
+
   stickyBar: {
     backgroundColor: C.charcoal,
     borderTopWidth: 1,
@@ -811,4 +1445,62 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.black,
   },
+  stickyBtnOffer: {
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  stickyBtnOfferTxt: {
+    fontSize: 9,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.muted,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(12,11,9,0.92)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: C.charcoal,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 32,
+    width: "100%",
+    maxWidth: 400,
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontFamily: "serif",
+    fontSize: 24,
+    fontWeight: "900",
+    color: C.cream,
+    marginBottom: 12,
+  },
+  modalSub: {
+    fontSize: 13,
+    color: C.muted,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  modalBtn: {
+    backgroundColor: C.gold,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    width: "100%",
+    alignItems: "center",
+  },
+  modalBtnTxt: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.black,
+  },
+  modalClose: { fontSize: 11, color: C.muted, letterSpacing: 1 },
 });
