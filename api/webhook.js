@@ -116,7 +116,7 @@ async function sendConfirmationEmail({
     },
     body: JSON.stringify({
       from: "MBC Michael By Christian <onboarding@resend.dev>",
-      to: [to],
+      to: "digwaldo@gmail.com", // hardcoded for now since buyer email can be unreliable
       subject:
         tokenIds.length > 1
           ? `Order Confirmed — ${tokenIds.length} Pieces · MBC`
