@@ -215,7 +215,7 @@ export default function RarityScreen() {
                   : "2%";
                 return (
                   <View
-                    key={tier.label}
+                    key={tier.display || tier.label}
                     style={[
                       s.tierRow,
                       { backgroundColor: tier.bg, borderColor: tier.border },
@@ -260,7 +260,7 @@ export default function RarityScreen() {
           <View style={s.tiersBox}>
             {TIERS.map((tier, i) => (
               <View
-                key={tier.label}
+                key={tier.display || tier.label}
                 style={[
                   s.tierTableRow,
                   i === TIERS.length - 1 && { borderBottomWidth: 0 },
