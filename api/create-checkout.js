@@ -105,32 +105,17 @@ module.exports = async (req, res) => {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
   try {
-    const { tokenId, successUrl, cancelUrl } = req.body;
-    if (!tokenId) return res.status(400).json({ error: "tokenId is required" });
+    const { tokenId, items, successUrl, cancelUrl } = req.body;
 
-    try {
-      const alreadySold = await isTokenSold(Number(tokenId));
-      if (alreadySold) {
-        return res.status(400).json({
-          error: "This piece has already been purchased.",
-          unavailable: true,
-        });
-      }
-    } catch (kvErr) {
-      console.log(
-        "KV check failed, falling through to Stellar:",
-        kvErr.message,
-      );
-    }
-
-    let bag;
-    try {
-      bag = await checkBagAvailability(Number(tokenId));
-    } catch (availErr) {
-      console.log(`Token ${tokenId} unavailable: ${availErr.message}`);
-      return res
-        .status(400)
-        .json({ error: availErr.message, unavailable: true });
+    // Build normalized list of token IDs to purchase
+    // Supports: single tokenId (string) OR items array [{tokenId, name, price, image}]
+    let bagIds = [];
+    if (items && Array.isArray(items) && items.length > 0) {
+      bagIds = items.map((i) => String(i.tokenId));
+    } else if (tokenId) {
+      bagIds = [String(tokenId)];
+    } else {
+      return res.status(400).json({ error: "tokenId or items required" });
     }
 
     const origin =
@@ -138,29 +123,73 @@ module.exports = async (req, res) => {
     const baseSuccessUrl = successUrl || `${origin}/success`;
     const baseCancelUrl = cancelUrl || `${origin}/`;
 
+    // Check availability + build line items for all tokens
+    const bags = [];
+    for (const id of bagIds) {
+      // KV check first (fast)
+      try {
+        const alreadySold = await isTokenSold(Number(id));
+        if (alreadySold) {
+          return res.status(400).json({
+            error: `Token #${id} has already been purchased.`,
+            unavailable: true,
+            tokenId: id,
+          });
+        }
+      } catch (kvErr) {
+        console.log(`KV check failed for token ${id}:`, kvErr.message);
+      }
+
+      // Stellar availability check
+      try {
+        const bag = await checkBagAvailability(Number(id));
+        bags.push({ ...bag, tokenId: id });
+      } catch (availErr) {
+        console.log(`Token ${id} unavailable: ${availErr.message}`);
+        return res.status(400).json({
+          error: availErr.message,
+          unavailable: true,
+          tokenId: id,
+        });
+      }
+    }
+
+    // Build Stripe line items
+    const lineItems = bags.map((bag) => ({
+      price_data: {
+        currency: "usd",
+        product_data: {
+          name: `MBC — ${bag.name}`,
+          description:
+            bag.edition_type ||
+            "Handcrafted luxury bag. NFC embedded. Authenticated.",
+          ...(bag.image ? { images: [bag.image] } : {}),
+        },
+        unit_amount: bag.price_usdc,
+      },
+      quantity: 1,
+    }));
+
+    const tokenIds = bags.map((b) => b.tokenId).join(",");
+    const bagNames = bags.map((b) => b.name).join("|");
+    const successTokenParam =
+      bags.length === 1
+        ? `token_id=${bags[0].tokenId}`
+        : `token_ids=${tokenIds}`;
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: `MBC — ${bag.name}`,
-              description:
-                bag.edition_type ||
-                "Handcrafted luxury bag. NFC embedded. Authenticated.",
-              ...(bag.image ? { images: [bag.image] } : {}),
-            },
-            unit_amount: bag.price_usdc,
-          },
-          quantity: 1,
-        },
-      ],
+      line_items: lineItems,
       mode: "payment",
       allow_promotion_codes: true,
-      success_url: `${baseSuccessUrl}?session_id={CHECKOUT_SESSION_ID}&token_id=${tokenId}`,
+      success_url: `${baseSuccessUrl}?session_id={CHECKOUT_SESSION_ID}&${successTokenParam}`,
       cancel_url: baseCancelUrl,
-      metadata: { token_id: String(tokenId), bag_name: bag.name },
+      metadata: {
+        token_ids: tokenIds,
+        bag_names: bagNames,
+        token_id: bags[0].tokenId, // backwards compat
+        bag_name: bags[0].name,
+      },
       shipping_address_collection: {
         allowed_countries: [
           "US",
