@@ -89,13 +89,16 @@ module.exports = async (req, res) => {
       for (const key of keys) pipeline.get(key);
       const results = await pipeline.exec();
 
-      const counts = {
-        Haute: 0,
-        "Très Rare": 0,
-        Prestige: 0,
-        Signature: 0,
-        Essential: 0,
-      };
+      const counts = {};
+      const TIER_ORDER = [
+        "Haute",
+        "Tres Rare",
+        "Prestige",
+        "Signature",
+        "Essential",
+      ];
+      for (const t of TIER_ORDER) counts[t] = 0;
+
       let total = 0;
       let topTokenId = null;
       let topRank = Infinity;
@@ -105,7 +108,15 @@ module.exports = async (req, res) => {
         const data = typeof raw === "string" ? JSON.parse(raw) : raw;
         if (!data?.label) return;
         total++;
-        if (counts[data.label] !== undefined) counts[data.label]++;
+
+        // Normalize label comparison — find matching tier regardless of encoding
+        const matchedTier = TIER_ORDER.find(
+          (t) =>
+            t.normalize("NFC") === data.label.normalize("NFC") ||
+            t.toLowerCase() === data.label.toLowerCase(),
+        );
+        if (matchedTier) counts[matchedTier]++;
+
         const tokenId = Number(keys[idx].replace("rarity:", ""));
         if (data.rank < topRank) {
           topRank = data.rank;
@@ -117,11 +128,13 @@ module.exports = async (req, res) => {
         found: true,
         total,
         topTokenId,
-        distribution: Object.entries(counts).map(([label, count]) => ({
+        distribution: TIER_ORDER.map((label) => ({
           label,
-          count,
+          count: counts[label] || 0,
           percent:
-            total > 0 ? parseFloat(((count / total) * 100).toFixed(1)) : 0,
+            total > 0
+              ? parseFloat((((counts[label] || 0) / total) * 100).toFixed(1))
+              : 0,
         })),
       });
     } catch (err) {

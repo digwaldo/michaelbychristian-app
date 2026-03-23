@@ -20,13 +20,15 @@ const MAX_W = IS_WEB ? 760 : undefined;
 const TIERS = [
   {
     label: "Haute",
+    display: "Haute",
     pct: "Top 5%",
     color: "#D4AF6A",
     bg: "rgba(212,175,106,0.12)",
     border: "rgba(212,175,106,0.4)",
   },
   {
-    label: "Très Rare",
+    label: "Tres Rare",
+    display: "Très Rare",
     pct: "Top 15%",
     color: "#B8963E",
     bg: "rgba(184,150,62,0.10)",
@@ -34,6 +36,7 @@ const TIERS = [
   },
   {
     label: "Prestige",
+    display: "Prestige",
     pct: "Top 35%",
     color: "#9A8E7A",
     bg: "rgba(154,142,122,0.10)",
@@ -41,6 +44,7 @@ const TIERS = [
   },
   {
     label: "Signature",
+    display: "Signature",
     pct: "Top 65%",
     color: "#7A7060",
     bg: "rgba(122,112,96,0.10)",
@@ -48,6 +52,7 @@ const TIERS = [
   },
   {
     label: "Essential",
+    display: "Essential",
     pct: "Remaining",
     color: "#5A5248",
     bg: "rgba(90,82,72,0.10)",
@@ -218,7 +223,7 @@ export default function RarityScreen() {
                   >
                     <View style={s.tierLeft}>
                       <Text style={[s.tierLabel, { color: tier.color }]}>
-                        {tier.label}
+                        {(tier as any).display || tier.label}
                       </Text>
                       <Text style={s.tierPct}>{tier.pct}</Text>
                     </View>
@@ -263,7 +268,7 @@ export default function RarityScreen() {
               >
                 <View style={[s.tierDot, { backgroundColor: tier.color }]} />
                 <Text style={[s.tierTableLabel, { color: tier.color }]}>
-                  {tier.label}
+                  {(tier as any).display || tier.label}
                 </Text>
                 <Text style={s.tierTablePct}>{tier.pct}</Text>
               </View>

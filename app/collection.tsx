@@ -207,7 +207,7 @@ function getRarityLabel(rank: number, total: number) {
   if (!total) return "—";
   const pct = (rank / total) * 100;
   if (pct <= 5) return "Haute";
-  if (pct <= 15) return "Très rare";
+  if (pct <= 15) return "Tres Rare";
   if (pct <= 35) return "Prestige";
   if (pct <= 65) return "Signature";
   return "Essential";
