@@ -248,8 +248,13 @@ function addRarity(items: NFTItem[]): NFTItem[] {
     };
   });
   scored.sort((a, b) => b.rarity_score - a.rarity_score);
+  // Assign same rank to items with identical scores (true ties)
   return scored.map((item, idx) => {
-    const rank = idx + 1;
+    // Find first item with same score — they share that rank
+    const firstWithScore = scored.findIndex(
+      (s) => s.rarity_score === item.rarity_score,
+    );
+    const rank = firstWithScore + 1;
     return {
       ...item,
       rarity_rank: rank,
