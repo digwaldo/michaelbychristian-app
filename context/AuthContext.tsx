@@ -1,21 +1,44 @@
 // context/AuthContext.tsx
 // Global auth + cart state — wrap your app with this
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session } from "@supabase/supabase-js";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import "react-native-get-random-values";
+import { Platform } from "react-native";
 import { CartItem, Profile, supabase } from "../lib/supabase";
 import { BACKEND } from "../lib/theme";
 
 const GUEST_SESSION_KEY = "mbc_guest_session";
 
+// Platform-safe storage — localStorage on web, AsyncStorage on native
+async function storageGet(key: string): Promise<string | null> {
+  if (Platform.OS === "web") {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+  const AS = require("@react-native-async-storage/async-storage").default;
+  return AS.getItem(key);
+}
+
+async function storageSet(key: string, value: string): Promise<void> {
+  if (Platform.OS === "web") {
+    try {
+      localStorage.setItem(key, value);
+    } catch {}
+    return;
+  }
+  const AS = require("@react-native-async-storage/async-storage").default;
+  return AS.setItem(key, value);
+}
+
 // Generate or retrieve guest session ID
 async function getGuestSessionId(): Promise<string> {
-  let id = await AsyncStorage.getItem(GUEST_SESSION_KEY);
+  let id = await storageGet(GUEST_SESSION_KEY);
   if (!id) {
     id = `guest_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    await AsyncStorage.setItem(GUEST_SESSION_KEY, id);
+    await storageSet(GUEST_SESSION_KEY, id);
   }
   return id;
 }
