@@ -5,8 +5,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session } from "@supabase/supabase-js";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import "react-native-get-random-values";
-import { BACKEND } from "../../lib/theme";
 import { CartItem, Profile, supabase } from "../lib/supabase";
+import { BACKEND } from "../lib/theme";
 
 const GUEST_SESSION_KEY = "mbc_guest_session";
 
