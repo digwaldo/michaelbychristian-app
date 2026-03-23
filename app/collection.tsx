@@ -564,13 +564,6 @@ export default function CollectionScreen() {
               <Text style={s.rarityBadgeTxt}>{item.rarity_label}</Text>
             </View>
           )}
-          {!!item.rarity_rank && (
-            <View style={s.rarityRankBadge}>
-              <Text style={s.rarityBadgeTxt}>
-                Rarity Rank {item.rarity_rank}
-              </Text>
-            </View>
-          )}
         </View>
 
         <View style={s.cardBody}>
@@ -585,8 +578,10 @@ export default function CollectionScreen() {
               .filter(Boolean)
               .join(" · ") || "NFC Embedded"}
           </Text>
-          <Text style={s.cardRarity} numberOfLines={1}>
-            Rarity Rank · #{item.rarity_rank}
+          <Text style={s.cardSecondary} numberOfLines={1}>
+            {[item.secondary_texture, item.secondary_color]
+              .filter(Boolean)
+              .join(" · ") || "NFC Embedded"}
           </Text>
         </View>
 
@@ -1271,11 +1266,11 @@ const s = StyleSheet.create({
     lineHeight: 17,
     marginBottom: 3,
   },
-  cardSub: { fontSize: 9, color: C.muted, letterSpacing: 0.5 },
-  cardRarity: {
+  cardSub: { fontSize: 9, color: C.goldLt, letterSpacing: 0.5 },
+  cardSecondary: {
     marginTop: 4,
     fontSize: 9,
-    color: C.goldLt,
+    color: C.muted,
     letterSpacing: 0.3,
   },
   cardFoot: {
