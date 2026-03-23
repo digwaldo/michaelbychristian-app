@@ -301,6 +301,7 @@ function addRarity(items: NFTItem[]): NFTItem[] {
 export default function CollectionScreen() {
   const { isPhone, isWeb } = useClientLayout();
   const { session, addToCart, isInCart, profile } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [all, setAll] = useState<NFTItem[]>([]);
   const [displayed, setDisplayed] = useState<NFTItem[]>([]);
@@ -584,46 +585,63 @@ export default function CollectionScreen() {
             <Text style={s.cardInit}>{init}</Text>
           )}
           <View style={s.imgOverlay} />
-          <View style={s.tokenBadge}>
-            <Text style={s.tokenBadgeTxt}>Edition #{item.tokenId}</Text>
+
+          {/* Top-left column: edition type stacked badges */}
+          <View style={s.badgeColLeft}>
+            {item.edition_type && !item.sold ? (
+              <View style={s.editionBadge}>
+                <Text style={s.editionBadgeTxt} numberOfLines={1}>
+                  {item.edition_type}
+                </Text>
+              </View>
+            ) : null}
+            {!!item.rarity_rank && (
+              <View style={s.rarityBadge}>
+                <Text style={s.rarityBadgeTxt} numberOfLines={1}>
+                  {item.rarity_label}
+                </Text>
+              </View>
+            )}
+            {gainPercent ? (
+              <View style={s.gainBadge}>
+                <Text style={s.gainBadgeTxt}>↑ {gainPercent}%</Text>
+              </View>
+            ) : null}
           </View>
-          {!item.sold && item.edition_type ? (
-            <View style={s.editionBadge}>
-              <Text style={s.editionBadgeTxt}>{item.edition_type}</Text>
+
+          {/* Top-right column: token + rarity rank */}
+          <View style={s.badgeColRight}>
+            <View style={s.tokenBadge}>
+              <Text style={s.tokenBadgeTxt} numberOfLines={1}>
+                Edition #{item.tokenId}
+              </Text>
             </View>
-          ) : null}
+            {!!item.rarity_rank && (
+              <View style={s.rarityRankBadge}>
+                <Text style={s.rarityBadgeTxt} numberOfLines={1}>
+                  Rank #{item.rarity_rank}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Bottom-left: listed/sold */}
           {!item.sold ? (
             <View style={s.listedBadge}>
               <Text style={s.listedBadgeTxt}>✦ Listed</Text>
             </View>
-          ) : null}
-          {item.sold ? (
+          ) : (
             <View style={s.soldBadge}>
-              <Text style={s.soldBadgeTxt}>Sold · Make Offer</Text>
+              <Text style={s.soldBadgeTxt}>Sold</Text>
             </View>
-          ) : null}
-          {gainPercent ? (
-            <View style={s.gainBadge}>
-              <Text style={s.gainBadgeTxt}>↑ {gainPercent}%</Text>
-            </View>
-          ) : null}
+          )}
+
+          {/* Bottom-right: NFC */}
           {item.nfc_chip_id ? (
             <View style={s.nfcBadge}>
               <Text style={s.nfcBadgeTxt}>✦ NFC</Text>
             </View>
           ) : null}
-          {!!item.rarity_rank && (
-            <View style={s.rarityBadge}>
-              <Text style={s.rarityBadgeTxt}>{item.rarity_label}</Text>
-            </View>
-          )}
-          {!!item.rarity_rank && (
-            <View style={s.rarityRankBadge}>
-              <Text style={s.rarityBadgeTxt}>
-                Rarity Rank {item.rarity_rank}
-              </Text>
-            </View>
-          )}
         </View>
 
         <View style={s.cardBody}>
@@ -753,14 +771,18 @@ export default function CollectionScreen() {
 
         {!loading && !error && (
           <View style={[s.toolbar, { paddingHorizontal: sidePad }]}>
+            {/* Count */}
             <Text style={s.toolCount}>
-              <Text style={{ color: C.cream, fontWeight: "600" }}>
-                {displayed.length}
-              </Text>{" "}
-              pieces
+              <Text style={s.toolCountNum}>{displayed.length}</Text>
+              {" pieces"}
             </Text>
+            {/* Sort pills — horizontal scroll */}
             <View style={s.toolRight}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ alignItems: "center", gap: 4 }}
+              >
                 {(
                   [
                     ["rarity", "Rarest"],
@@ -780,20 +802,22 @@ export default function CollectionScreen() {
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
-              <TouchableOpacity
-                style={[s.filterBtn, activeCount > 0 && s.filterBtnOn]}
-                onPress={() => setFilterOpen(true)}
-              >
-                <Text
+                {/* Filter button inline at end of scroll */}
+                <TouchableOpacity
                   style={[
-                    s.filterBtnTxt,
-                    activeCount > 0 && { color: C.black },
+                    s.sortBtn,
+                    activeCount > 0 && s.sortBtnOn,
+                    { marginLeft: 4 },
                   ]}
+                  onPress={() => setFilterOpen(true)}
                 >
-                  Filter{activeCount > 0 ? ` (${activeCount})` : ""}
-                </Text>
-              </TouchableOpacity>
+                  <Text
+                    style={[s.sortBtnTxt, activeCount > 0 && s.sortBtnTxtOn]}
+                  >
+                    Filter{activeCount > 0 ? ` (${activeCount})` : ""}
+                  </Text>
+                </TouchableOpacity>
+              </ScrollView>
             </View>
           </View>
         )}
@@ -1081,13 +1105,14 @@ const s = StyleSheet.create({
   toolbar: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderTopWidth: 1,
     borderTopColor: C.border,
+    gap: 8,
   },
-  toolCount: { fontSize: 11, color: C.muted },
-  toolRight: { flexDirection: "row", alignItems: "center", gap: 6 },
+  toolCount: { fontSize: 11, color: C.muted, minWidth: 52 },
+  toolCountNum: { color: C.cream, fontWeight: "600" },
+  toolRight: { flex: 1 },
   sortBtn: {
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -1103,19 +1128,7 @@ const s = StyleSheet.create({
     color: C.muted,
   },
   sortBtnTxtOn: { color: C.gold },
-  filterBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
-  filterBtnOn: { backgroundColor: C.gold, borderColor: C.gold },
-  filterBtnTxt: {
-    fontSize: 8,
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
-    color: C.muted,
-  },
+
   center: {
     flex: 1,
     alignItems: "center",
@@ -1182,35 +1195,45 @@ const s = StyleSheet.create({
     fontWeight: "900",
     color: "rgba(184,150,62,0.1)",
   },
-  tokenBadge: {
+  // Badge columns — stacked vertically to prevent overlap
+  badgeColLeft: {
     position: "absolute",
-    top: 8,
-    right: 8,
+    top: 6,
+    left: 6,
+    gap: 4,
+    maxWidth: "52%",
+  },
+  badgeColRight: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    gap: 4,
+    alignItems: "flex-end",
+    maxWidth: "46%",
+  },
+  tokenBadge: {
     backgroundColor: "rgba(12,11,9,0.88)",
     borderWidth: 1,
     borderColor: C.border,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
   },
   tokenBadgeTxt: {
-    fontSize: 7,
-    letterSpacing: 1.5,
+    fontSize: 6,
+    letterSpacing: 1,
     textTransform: "uppercase",
     color: C.gold,
   },
   editionBadge: {
-    position: "absolute",
-    top: 8,
-    left: 8,
     backgroundColor: "rgba(12,11,9,0.85)",
     borderWidth: 1,
     borderColor: C.borderBright,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
   },
   editionBadgeTxt: {
     fontSize: 6,
-    letterSpacing: 1.5,
+    letterSpacing: 1,
     textTransform: "uppercase",
     color: C.goldLt,
   },
@@ -1249,14 +1272,11 @@ const s = StyleSheet.create({
     fontWeight: "600",
   },
   gainBadge: {
-    position: "absolute",
-    top: 58,
-    left: 8,
     backgroundColor: "rgba(91,175,133,0.2)",
     borderWidth: 1,
     borderColor: "rgba(91,175,133,0.55)",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
   },
   gainBadgeTxt: {
     fontSize: 7,
@@ -1282,26 +1302,18 @@ const s = StyleSheet.create({
     fontWeight: "600",
   },
   rarityBadge: {
-    position: "absolute",
-    top: 34,
-    left: 8,
     backgroundColor: "rgba(184,150,62,0.18)",
     borderWidth: 1,
     borderColor: "rgba(184,150,62,0.45)",
     paddingHorizontal: 5,
     paddingVertical: 2,
-    maxWidth: "48%",
   },
   rarityRankBadge: {
-    position: "absolute",
-    top: 34,
-    right: 8,
     backgroundColor: "rgba(184,150,62,0.18)",
     borderWidth: 1,
     borderColor: "rgba(184,150,62,0.45)",
     paddingHorizontal: 5,
     paddingVertical: 2,
-    maxWidth: "48%",
   },
   rarityBadgeTxt: {
     fontSize: 6,
@@ -1393,6 +1405,28 @@ const s = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: "uppercase",
     color: C.red,
+  },
+  hamburger: { padding: 4, gap: 4, justifyContent: "center" },
+  hLine: { width: 20, height: 2, backgroundColor: C.cream, borderRadius: 1 },
+  hLineTop: { transform: [{ rotate: "45deg" }, { translateY: 6 }] },
+  hLineMid: { opacity: 0 },
+  hLineBot: { transform: [{ rotate: "-45deg" }, { translateY: -6 }] },
+  mobileMenu: {
+    backgroundColor: C.charcoal,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+  },
+  mobileMenuItem: {
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  mobileMenuTxt: {
+    fontSize: 11,
+    letterSpacing: 2.5,
+    textTransform: "uppercase",
+    color: C.cream,
   },
   filterModal: { flex: 1, backgroundColor: C.black },
   filterHandle: {
