@@ -97,7 +97,6 @@ interface NFTItem {
   nfc_chip_id: string;
   collection: string;
   collaboration: string;
-  trait_rarity: string;
   design_status: string;
   archive_status: string;
   tailored_year: string;
@@ -128,7 +127,6 @@ interface Filters {
   authentication: string[];
   collection: string[];
   collaboration: string[];
-  trait_rarity: string[];
   design_status: string[];
   archive_status: string[];
   tailored_year: string[];
@@ -152,7 +150,6 @@ const emptyFilters: Filters = {
   authentication: [],
   collection: [],
   collaboration: [],
-  trait_rarity: [],
   design_status: [],
   archive_status: [],
   tailored_year: [],
@@ -173,7 +170,6 @@ const traitKeys: (keyof Filters)[] = [
   "authentication",
   "collection",
   "collaboration",
-  "trait_rarity",
   "design_status",
   "archive_status",
   "tailored_year",
@@ -349,7 +345,6 @@ export default function CollectionScreen() {
               nfc_chip_id: t.nfc_chip_id || raw?.nfc_chip_id || "",
               collection: t.collection || raw?.collection || "",
               collaboration: t.collaboration || raw?.collaboration || "",
-              trait_rarity: t.trait_rarity || raw?.trait_rarity || "",
               design_status: t.design_status || raw?.design_status || "",
               archive_status: t.archive_status || raw?.archive_status || "",
               tailored_year: t.tailored_year || raw?.tailored_year || "",
@@ -372,6 +367,24 @@ export default function CollectionScreen() {
           listed: enriched.filter((n) => n.listed && !n.sold).length,
         });
         applyAll(enriched, filters, sort);
+
+        // ── Save computed rarity to KV in background ──────────
+        // Piece pages read from here so they have accurate rank
+        // without needing to load the full collection
+        fetch(`${BACKEND}/api/save-rarity`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            rarities: enriched.map((n) => ({
+              tokenId: n.tokenId,
+              rank: n.rarity_rank,
+              label: n.rarity_label,
+              score: n.rarity_score,
+              percentile: n.rarity_percentile,
+              traitCount: n.trait_count,
+            })),
+          }),
+        }).catch(() => null); // fire and forget — never block the UI
       } catch (e: any) {
         setError(e.message || "Could not connect to Stellar");
       } finally {
@@ -473,7 +486,6 @@ export default function CollectionScreen() {
   const authenticationOptions = getOptions("authentication");
   const collectionOptions = getOptions("collection");
   const collaborationOptions = getOptions("collaboration");
-  const rarityOptions = getOptions("trait_rarity");
   const designStatusOptions = getOptions("design_status");
   const archiveStatusOptions = getOptions("archive_status");
   const tailoredYearOptions = getOptions("tailored_year");
@@ -564,6 +576,13 @@ export default function CollectionScreen() {
               <Text style={s.rarityBadgeTxt}>{item.rarity_label}</Text>
             </View>
           )}
+          {!!item.rarity_rank && (
+            <View style={s.rarityRankBadge}>
+              <Text style={s.rarityBadgeTxt}>
+                Rarity Rank {item.rarity_rank}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={s.cardBody}>
@@ -578,10 +597,8 @@ export default function CollectionScreen() {
               .filter(Boolean)
               .join(" · ") || "NFC Embedded"}
           </Text>
-          <Text style={s.cardSecondary} numberOfLines={1}>
-            {[item.secondary_texture, item.secondary_color]
-              .filter(Boolean)
-              .join(" · ") || "NFC Embedded"}
+          <Text style={s.cardRarity} numberOfLines={1}>
+            Rarity Rank · #{item.rarity_rank}
           </Text>
         </View>
 
@@ -925,7 +942,6 @@ export default function CollectionScreen() {
               collaborationOptions,
               "collaboration",
             )}
-            {renderTraitSection("Trait Rarity", rarityOptions, "trait_rarity")}
             {renderTraitSection(
               "Design Status",
               designStatusOptions,
@@ -1266,11 +1282,11 @@ const s = StyleSheet.create({
     lineHeight: 17,
     marginBottom: 3,
   },
-  cardSub: { fontSize: 9, color: C.goldLt, letterSpacing: 0.5 },
-  cardSecondary: {
+  cardSub: { fontSize: 9, color: C.muted, letterSpacing: 0.5 },
+  cardRarity: {
     marginTop: 4,
     fontSize: 9,
-    color: C.muted,
+    color: C.goldLt,
     letterSpacing: 0.3,
   },
   cardFoot: {

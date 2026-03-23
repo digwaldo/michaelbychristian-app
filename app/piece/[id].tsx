@@ -108,7 +108,6 @@ async function loadTokenFromStellar(tokenId: number) {
     nfc_chip_id: t.nfc_chip_id || raw.nfc_chip_id || "",
     collection: t.collection || raw.collection || "",
     collaboration: t.collaboration || raw.collaboration || "",
-    trait_rarity: t.trait_rarity || raw.trait_rarity || "",
     design_status: t.design_status || raw.design_status || "",
     archive_status: t.archive_status || raw.archive_status || "",
     tailored_year: Number(t.tailored_year || raw.tailored_year || 0),
@@ -141,7 +140,6 @@ const TRAITS: [string, string][] = [
   ["nfc_chip_id", "NFC Chip ID"],
   ["collection", "Collection"],
   ["collaboration", "Collaboration"],
-  ["trait_rarity", "Rarity"],
   ["design_status", "Design Status"],
   ["archive_status", "Archive Status"],
   ["tailored_year", "Tailored Year"],
@@ -184,6 +182,9 @@ export default function PieceScreen() {
   // XLM gain for sold items
   const [gainPercent, setGainPercent] = useState<number | null>(null);
 
+  // Rarity from KV
+  const [rarityData, setRarityData] = useState<any | null>(null);
+
   const fadeIn = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -194,7 +195,7 @@ export default function PieceScreen() {
     setPageState("loading");
     setError(null);
     try {
-      const [tokenData, soldRes, gainsRes] = await Promise.all([
+      const [tokenData, soldRes, gainsRes, rarityRes] = await Promise.all([
         loadTokenFromStellar(tokenId),
         fetch(`${BACKEND}/api/check-sold?token_id=${tokenId}`)
           .then((r) => r.json())
@@ -202,8 +203,12 @@ export default function PieceScreen() {
         fetch(`${BACKEND}/api/sold-gains`)
           .then((r) => r.json())
           .catch(() => null),
+        fetch(`${BACKEND}/api/get-rarity?token_id=${tokenId}`)
+          .then((r) => r.json())
+          .catch(() => null),
       ]);
       if (gainsRes?.gains?.[tokenId]) setGainPercent(gainsRes.gains[tokenId]);
+      if (rarityRes?.found) setRarityData(rarityRes);
 
       setData(tokenData);
       setSaleData(soldRes);
@@ -473,7 +478,6 @@ export default function PieceScreen() {
           {/* Trait chips */}
           <View style={s.chips}>
             {[
-              data.trait_rarity,
               data.primary_texture,
               data.hardware,
               data.nfc_chip_id && "NFC Embedded",
@@ -485,6 +489,33 @@ export default function PieceScreen() {
                 </View>
               ))}
           </View>
+
+          {/* ── Rarity info ── */}
+          {rarityData && (
+            <View style={s.rarityRow}>
+              <View style={s.rarityItem}>
+                <Text style={s.rarityLabel}>Rarity Rank</Text>
+                <Text style={s.rarityVal}>
+                  #{rarityData.rank}{" "}
+                  <Text style={s.rarityOf}>of {rarityData.total}</Text>
+                </Text>
+              </View>
+              <View style={s.rarityItem}>
+                <Text style={s.rarityLabel}>Tier</Text>
+                <Text style={s.rarityVal}>{rarityData.label}</Text>
+              </View>
+              <View style={s.rarityItem}>
+                <Text style={s.rarityLabel}>Top</Text>
+                <Text style={s.rarityVal}>
+                  {rarityData.percentile?.toFixed(1)}%
+                </Text>
+              </View>
+              <View style={[s.rarityItem, { borderRightWidth: 0 }]}>
+                <Text style={s.rarityLabel}>Traits</Text>
+                <Text style={s.rarityVal}>{rarityData.traitCount}</Text>
+              </View>
+            </View>
+          )}
 
           {/* ── PAGE STATE: LISTED — Buy button ── */}
           {pageState === "listed" && (
@@ -1194,6 +1225,30 @@ const s = StyleSheet.create({
     color: C.muted,
     marginBottom: 2,
   },
+  rarityRow: {
+    flexDirection: "row",
+    borderWidth: 1,
+    borderColor: C.border,
+    marginBottom: 20,
+    overflow: "hidden",
+  },
+  rarityItem: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 10,
+    borderRightWidth: 1,
+    borderRightColor: C.border,
+    backgroundColor: C.charcoal,
+  },
+  rarityLabel: {
+    fontSize: 7,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: C.muted,
+    marginBottom: 4,
+  },
+  rarityVal: { fontSize: 13, color: C.goldLt, fontWeight: "700" },
+  rarityOf: { fontSize: 9, color: C.muted, fontWeight: "400" },
   gainRow: {
     flexDirection: "row",
     justifyContent: "space-between",
