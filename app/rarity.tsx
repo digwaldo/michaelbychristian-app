@@ -3,13 +3,13 @@
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BACKEND, C } from "../lib/theme";
@@ -115,7 +115,7 @@ export default function RarityScreen() {
 
   async function loadDist() {
     try {
-      const res = await fetch(`${BACKEND}/api/rarity-distribution`);
+      const res = await fetch(`${BACKEND}/api/rarity?type=distribution`);
       const json = await res.json();
 
       if (!json.found) {

@@ -320,7 +320,7 @@ export default function CollectionScreen() {
       if (!isRefresh) setLoading(true);
       setError(null);
 
-      fetch(`${BACKEND}/api/sold-gains`)
+      fetch(`${BACKEND}/api/sold?type=gains`)
         .then((r) => r.json())
         .then((d) => {
           if (d?.gains) setSoldGains(d.gains);
@@ -329,7 +329,7 @@ export default function CollectionScreen() {
 
       let kvSoldIds: Set<number> = new Set();
       try {
-        const soldRes = await fetch(`${BACKEND}/api/sold-list`);
+        const soldRes = await fetch(`${BACKEND}/api/sold?type=list`);
         const soldData = await soldRes.json();
         kvSoldIds = new Set(soldData.soldTokenIds || []);
       } catch (e) {
@@ -409,7 +409,7 @@ export default function CollectionScreen() {
         // ── Save computed rarity to KV in background ──────────
         // Piece pages read from here so they have accurate rank
         // without needing to load the full collection
-        fetch(`${BACKEND}/api/save-rarity`, {
+        fetch(`${BACKEND}/api/rarity`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

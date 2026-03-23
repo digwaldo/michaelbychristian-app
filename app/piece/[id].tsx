@@ -197,13 +197,13 @@ export default function PieceScreen() {
     try {
       const [tokenData, soldRes, gainsRes, rarityRes] = await Promise.all([
         loadTokenFromStellar(tokenId),
-        fetch(`${BACKEND}/api/check-sold?token_id=${tokenId}`)
+        fetch(`${BACKEND}/api/sold?type=check&token_id=${tokenId}`)
           .then((r) => r.json())
           .catch(() => ({ sold: false })),
-        fetch(`${BACKEND}/api/sold-gains`)
+        fetch(`${BACKEND}/api/sold?type=gains`)
           .then((r) => r.json())
           .catch(() => null),
-        fetch(`${BACKEND}/api/get-rarity?token_id=${tokenId}`)
+        fetch(`${BACKEND}/api/rarity?type=token&token_id=${tokenId}`)
           .then((r) => r.json())
           .catch(() => null),
       ]);
