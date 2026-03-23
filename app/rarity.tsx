@@ -115,56 +115,26 @@ export default function RarityScreen() {
 
   async function loadDist() {
     try {
-      // Fetch all rarity keys from KV via a collection summary
-      // We use sold-list just to get a token count, then fetch each rarity
-      const [soldRes] = await Promise.all([
-        fetch(`${BACKEND}/api/sold-list`)
-          .then((r) => r.json())
-          .catch(() => ({ soldTokenIds: [] })),
-      ]);
+      const res = await fetch(`${BACKEND}/api/rarity-distribution`);
+      const json = await res.json();
 
-      // Fetch rarity data for tokens 1-50 (expand as collection grows)
-      const rarityResults = await Promise.all(
-        Array.from({ length: 20 }, (_, i) => i + 1).map((id) =>
-          fetch(`${BACKEND}/api/get-rarity?token_id=${id}`)
-            .then((r) => r.json())
-            .catch(() => null),
-        ),
-      );
-
-      const valid = rarityResults.filter((r) => r?.found);
-      if (!valid.length) {
+      if (!json.found) {
         setLoading(false);
         return;
       }
 
-      const total = valid[0]?.total || valid.length;
-
-      const counts: Record<string, number> = {
-        Haute: 0,
-        "Très Rare": 0,
-        Prestige: 0,
-        Signature: 0,
-        Essential: 0,
-      };
-
-      let top: { name: string; tokenId: number; rank: number } | null = null;
-
-      valid.forEach((r, idx) => {
-        if (r.label && counts[r.label] !== undefined) counts[r.label]++;
-        if (!top || r.rank < top.rank) {
-          top = { name: `Token #${idx + 1}`, tokenId: idx + 1, rank: r.rank };
-        }
-      });
-
       setDist(
-        Object.entries(counts).map(([label, count]) => ({
-          label,
-          count,
-          total: valid.length,
+        json.distribution.map((d: any) => ({
+          label: d.label,
+          count: d.count,
+          total: json.total,
         })),
       );
-      if (top) setTopBag(top);
+      if (json.topTokenId)
+        setTopBag({
+          name: `Token #${json.topTokenId}`,
+          tokenId: json.topTokenId,
+        });
     } catch (e) {
       console.log("rarity dist fetch failed:", e);
     } finally {
@@ -625,3 +595,5 @@ const s = StyleSheet.create({
     color: C.black,
   },
 });
+// Note: rarity data is populated by visiting the collection page
+// The save-rarity API is called automatically after addRarity() completes
