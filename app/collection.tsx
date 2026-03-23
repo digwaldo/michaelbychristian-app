@@ -213,12 +213,37 @@ function getRarityLabel(rank: number, total: number) {
   return "Essential";
 }
 
+// ── Trait weights for rarity scoring ─────────────────────────
+// Higher weight = trait contributes more to rarity score
+// Reflects actual luxury value of physical material differences
+const TRAIT_WEIGHTS: Record<string, number> = {
+  // Tier 1 — Physical materials (3x)
+  primary_texture: 3,
+  secondary_texture: 3,
+  hardware: 3,
+  // Tier 2 — Design DNA (2x)
+  silhouette: 2,
+  model: 2,
+  edition_type: 2,
+  primary_color: 2,
+  secondary_color: 2,
+  // Tier 3 — Context & provenance (1x — default)
+  // textured_pattern, interior_lining, authentication,
+  // collection, collaboration, design_status, archive_status,
+  // tailored_year, design_year
+};
+
+// NFC bonus — flat points added for bags with embedded NFC chip
+const NFC_BONUS_MULTIPLIER = 2;
+
 function addRarity(items: NFTItem[]): NFTItem[] {
   const total = items.length;
   if (!total) return items;
+
   const counts: Record<string, Record<string, number>> = {};
   for (const key of rarityTraitKeys) counts[String(key)] = {};
   const traitCountFreq: Record<number, number> = {};
+
   for (const item of items) {
     const presentKeys = getPresentTraitKeys(item);
     traitCountFreq[presentKeys.length] =
@@ -228,16 +253,27 @@ function addRarity(items: NFTItem[]): NFTItem[] {
       counts[String(key)][value] = (counts[String(key)][value] || 0) + 1;
     }
   }
+
   const scored = items.map((item) => {
     const presentKeys = getPresentTraitKeys(item);
     let score = 0;
+
     for (const key of presentKeys) {
       const value = String(item[key]).trim();
       const count = counts[String(key)][value] || 1;
-      score += total / count;
+      const weight = TRAIT_WEIGHTS[String(key)] || 1;
+      score += (total / count) * weight;
     }
+
+    // Trait count bonus — weighted
     const tcCount = traitCountFreq[presentKeys.length] || 1;
     score += total / tcCount;
+
+    // NFC bonus — bags with embedded NFC chips are rarer
+    if (item.nfc_chip_id) {
+      score += (total / 1) * NFC_BONUS_MULTIPLIER;
+    }
+
     return {
       ...item,
       rarity_score: score,
@@ -247,14 +283,11 @@ function addRarity(items: NFTItem[]): NFTItem[] {
       trait_count: presentKeys.length,
     };
   });
+
   scored.sort((a, b) => b.rarity_score - a.rarity_score);
-  // Assign same rank to items with identical scores (true ties)
+
   return scored.map((item, idx) => {
-    // Find first item with same score — they share that rank
-    const firstWithScore = scored.findIndex(
-      (s) => s.rarity_score === item.rarity_score,
-    );
-    const rank = firstWithScore + 1;
+    const rank = idx + 1;
     return {
       ...item,
       rarity_rank: rank,
@@ -1016,6 +1049,7 @@ const s = StyleSheet.create({
   },
   navTitleEm: { fontStyle: "italic", fontWeight: "400", color: C.goldLt },
   navBack: { fontSize: 11, color: C.muted, letterSpacing: 0.5 },
+  navRarity: { fontSize: 11, color: C.gold, letterSpacing: 0.5 },
   statsBar: {
     flexDirection: "row",
     borderTopWidth: 1,

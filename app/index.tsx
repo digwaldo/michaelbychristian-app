@@ -1,24 +1,23 @@
-"use client"; // ← This line is critical — makes the whole page client-only (no SSR/hydration issues)
+"use client";
 
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    Animated,
-    Dimensions,
-    Image,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  Dimensions,
+  Image,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { C } from "../lib/theme";
 
-// ── Client-only layout detection ───────────────────────────────
 const useClientLayout = () => {
   const [layout, setLayout] = useState({
     w: 375,
@@ -33,7 +32,6 @@ const useClientLayout = () => {
     const update = () => {
       const dims = Dimensions.get("window");
       const isWeb = Platform.OS === "web";
-
       setLayout({
         w: dims.width,
         h: dims.height,
@@ -43,7 +41,6 @@ const useClientLayout = () => {
         isWebWide: isWeb && dims.width >= 1400,
       });
     };
-
     update();
     const sub = Dimensions.addEventListener("change", update);
     return () => sub?.remove();
@@ -52,7 +49,6 @@ const useClientLayout = () => {
   return layout;
 };
 
-// ── Data (unchanged) ────────────────────────────────────────────
 interface BagItem {
   src: number;
   name: string;
@@ -189,7 +185,6 @@ const STEPS = [
   },
 ];
 
-// ── Marquee Ticker ──────────────────────────────────────────────
 function MarqueeTicker() {
   const translateX = useRef(new Animated.Value(0)).current;
   const [rowWidth, setRowWidth] = useState(0);
@@ -200,8 +195,8 @@ function MarqueeTicker() {
     Animated.loop(
       Animated.timing(translateX, {
         toValue: -rowWidth,
-        duration: rowWidth * 18, // speed: 18ms per pixel
-        useNativeDriver: Platform.OS !== "web", // ← safe on web (avoids native driver warnings)
+        duration: rowWidth * 18,
+        useNativeDriver: Platform.OS !== "web",
         isInteraction: false,
       }),
     ).start();
@@ -249,22 +244,17 @@ const ts = StyleSheet.create({
   },
 });
 
-// ── Main Home Screen ────────────────────────────────────────────
 export default function HomeScreen() {
   const layout = useClientLayout();
   const { w, h, isPhone, isTablet, isWeb, isWebWide } = layout;
-
   const [menuOpen, setMenuOpen] = useState(false);
-
   const fade = useRef(new Animated.Value(0)).current;
   const slideY = useRef(new Animated.Value(24)).current;
-
   const player = useVideoPlayer(require("../assets/hero-video.mp4"));
 
   useEffect(() => {
     player.loop = true;
     player.muted = true;
-
     const start = async () => {
       try {
         player.play();
@@ -272,7 +262,6 @@ export default function HomeScreen() {
         console.log("Video autoplay failed:", e);
       }
     };
-
     start();
   }, [player]);
 
@@ -293,15 +282,16 @@ export default function HomeScreen() {
     ]).start();
   }, []);
 
-  // Responsive values (now using client layout)
   const sidePad = isPhone ? 18 : 24;
   const heroH = isPhone ? Math.min(h * 0.58, 460) : isTablet ? h * 0.68 : 540;
   const heroTitleSize = isPhone ? 40 : isTablet ? 48 : 58;
   const h2Size = isPhone ? 28 : 36;
   const maxW = isWeb ? 760 : undefined;
 
+  // ── NAV_LINKS — Rarity added ──────────────────────────────────
   const NAV_LINKS = [
     { label: "Collection", path: "/collection" },
+    { label: "Rarity", path: "/rarity", gold: true },
     { label: "Community", path: "/community" },
     { label: "Gallery", path: "/gallery" },
     { label: "About", path: "/about" },
@@ -309,7 +299,6 @@ export default function HomeScreen() {
   ];
 
   const COLS = isPhone ? 2 : 3;
-  const cardW = (w - (COLS + 1) * 2) / COLS;
 
   return (
     <View style={s.root}>
@@ -324,7 +313,6 @@ export default function HomeScreen() {
                 : {},
             ]}
           >
-            {/* Logo */}
             <View>
               <Text style={s.navEye}>Collection 2026</Text>
               <Text style={s.navLogo}>
@@ -340,7 +328,9 @@ export default function HomeScreen() {
                     key={l.label}
                     onPress={() => router.push(l.path as any)}
                   >
-                    <Text style={s.navLink}>{l.label}</Text>
+                    <Text style={[s.navLink, l.gold && { color: C.gold }]}>
+                      {l.label}
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -361,7 +351,7 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Mobile dropdown menu */}
+        {/* Mobile dropdown */}
         {isPhone && menuOpen && (
           <View style={s.mobileMenu}>
             {NAV_LINKS.map((l) => (
@@ -373,7 +363,9 @@ export default function HomeScreen() {
                   router.push(l.path as any);
                 }}
               >
-                <Text style={s.mobileMenuTxt}>{l.label}</Text>
+                <Text style={[s.mobileMenuTxt, l.gold && { color: C.gold }]}>
+                  {l.label}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -394,7 +386,6 @@ export default function HomeScreen() {
                 startsPictureInPictureAutomatically={false}
               />
             </View>
-
             <LinearGradient
               colors={
                 isPhone
@@ -404,7 +395,6 @@ export default function HomeScreen() {
               locations={[0.2, 0.65, 1]}
               style={s.heroOverlay}
             />
-
             <Animated.View
               style={[
                 s.heroContent,
@@ -420,7 +410,6 @@ export default function HomeScreen() {
                 >
                   Phygital · Luxury Fashion · Stellar · Est. 2026
                 </Text>
-
                 <Text
                   style={[
                     s.heroTitle,
@@ -432,7 +421,6 @@ export default function HomeScreen() {
                 >
                   Michael
                 </Text>
-
                 <Text
                   style={[
                     s.heroSub,
@@ -444,7 +432,6 @@ export default function HomeScreen() {
                 >
                   By Christian
                 </Text>
-
                 <Text
                   style={[
                     s.heroTagline,
@@ -454,7 +441,6 @@ export default function HomeScreen() {
                   Where artisan craft meets immutable provenance.{"\n"}Every
                   stitch signed on-chain.
                 </Text>
-
                 <View style={[s.ctaRow, isPhone && { marginTop: 20 }]}>
                   <TouchableOpacity
                     style={[
@@ -468,7 +454,6 @@ export default function HomeScreen() {
                       Browse & Buy
                     </Text>
                   </TouchableOpacity>
-
                   <TouchableOpacity
                     style={[
                       s.btnGhost,
@@ -482,7 +467,6 @@ export default function HomeScreen() {
                     </Text>
                   </TouchableOpacity>
                 </View>
-
                 <View style={[s.chips, isPhone && { marginTop: 12 }]}>
                   {[
                     "💳 Card",
@@ -589,8 +573,6 @@ export default function HomeScreen() {
               <Text style={s.btnGoldTxt}>Browse All Pieces & Buy →</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Bag grid */}
           <View style={[s.bagGrid, { paddingHorizontal: 2 }]}>
             <View style={s.bagRow}>
               {BAGS.slice(0, COLS).map((bag, i) => (
@@ -761,10 +743,8 @@ export default function HomeScreen() {
   );
 }
 
-// ── Styles (unchanged) ──────────────────────────────────────────
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.black },
-
   navSafe: {
     backgroundColor: C.charcoal,
     borderBottomWidth: 1,
@@ -802,13 +782,11 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: "rgba(245,239,224,0.65)",
   },
-
   hamburger: { padding: 4, gap: 5, justifyContent: "center" },
   hLine: { width: 22, height: 2, backgroundColor: C.cream, borderRadius: 1 },
   hLineTop: { transform: [{ rotate: "45deg" }, { translateY: 7 }] },
   hLineMid: { opacity: 0 },
   hLineBot: { transform: [{ rotate: "-45deg" }, { translateY: -7 }] },
-
   mobileMenu: {
     backgroundColor: C.charcoal,
     borderTopWidth: 1,
@@ -826,20 +804,13 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.cream,
   },
-
   hero: {
     width: "100%",
     justifyContent: "flex-end",
     overflow: "hidden",
     backgroundColor: C.black,
   },
-
-  heroSection: {
-    width: "100%",
-    backgroundColor: C.black,
-    overflow: "hidden",
-  },
-
+  heroSection: { width: "100%", backgroundColor: C.black, overflow: "hidden" },
   heroFrame: {
     width: "100%",
     position: "relative",
@@ -847,7 +818,6 @@ const s = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: C.black,
   },
-
   heroMedia: {
     position: "absolute",
     top: 0,
@@ -857,7 +827,6 @@ const s = StyleSheet.create({
     overflow: "hidden",
     zIndex: 0,
   },
-
   heroOverlay: {
     position: "absolute",
     top: 0,
@@ -866,24 +835,10 @@ const s = StyleSheet.create({
     left: 0,
     zIndex: 1,
   },
-
-  heroContent: {
-    paddingBottom: 44,
-    zIndex: 2,
-  },
-
-  heroVideo: {
-    width: "100%",
-    height: "100%",
-  },
-
-  heroTextBlock: {
-    maxWidth: 420,
-  },
-
-  heroTextBlockWide: {
-    marginLeft: 80,
-  },
+  heroContent: { paddingBottom: 44, zIndex: 2 },
+  heroVideo: { width: "100%", height: "100%" },
+  heroTextBlock: { maxWidth: 420 },
+  heroTextBlockWide: { marginLeft: 80 },
   heroInner: {},
   heroEye: {
     fontSize: 9,
@@ -915,7 +870,6 @@ const s = StyleSheet.create({
     lineHeight: 23,
     maxWidth: 380,
   },
-
   ctaRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 24 },
   btnWhite: {
     backgroundColor: C.cream,
@@ -942,7 +896,6 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.cream,
   },
-
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 16 },
   chip: {
     backgroundColor: "rgba(255,255,255,0.06)",
@@ -957,7 +910,6 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: "rgba(245,239,224,0.48)",
   },
-
   section: {
     borderTopWidth: 1,
     borderTopColor: C.border,
@@ -985,7 +937,6 @@ const s = StyleSheet.create({
     lineHeight: 24,
     marginBottom: 24,
   },
-
   point: {
     flexDirection: "row",
     paddingTop: 20,
@@ -1011,7 +962,6 @@ const s = StyleSheet.create({
     letterSpacing: 0.2,
   },
   pointBody: { fontSize: 13, color: "#A09880", lineHeight: 20 },
-
   statsSection: {
     borderTopWidth: 1,
     borderTopColor: C.border,
@@ -1044,7 +994,6 @@ const s = StyleSheet.create({
     flex: 1,
     flexWrap: "wrap",
   },
-
   collSection: {
     borderTopWidth: 1,
     borderTopColor: C.border,
@@ -1094,7 +1043,6 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.muted,
   },
-
   phygitalLead: {
     fontSize: 15,
     color: "#A09880",
@@ -1158,7 +1106,6 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.muted,
   },
-
   step: {
     flexDirection: "row",
     paddingTop: 20,
@@ -1207,7 +1154,6 @@ const s = StyleSheet.create({
     color: C.green,
   },
   stepBody: { fontSize: 13, color: "#A09880", lineHeight: 20 },
-
   callout: {
     marginTop: 32,
     backgroundColor: C.black,
@@ -1236,7 +1182,6 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.cream,
   },
-
   footer: {
     paddingVertical: 44,
     alignItems: "center",

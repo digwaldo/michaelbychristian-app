@@ -375,7 +375,13 @@ export default function PieceScreen() {
           <View style={s.topBarCenter}>
             <Text style={s.topEye}>Michael By Christian</Text>
           </View>
-          <View style={{ width: 80 }} />
+          <TouchableOpacity
+            onPress={() => router.push("/rarity" as any)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{ width: 80, alignItems: "flex-end" }}
+          >
+            <Text style={s.rarityNavLink}>✦ Rarity</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
 
@@ -1054,6 +1060,7 @@ const s = StyleSheet.create({
     color: C.gold,
   },
   backLink: { fontSize: 12, color: C.muted },
+  rarityNavLink: { fontSize: 11, color: C.gold, letterSpacing: 0.5 },
 
   topBar: {
     backgroundColor: C.charcoal,
