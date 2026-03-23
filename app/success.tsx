@@ -1,31 +1,32 @@
-// app/success.tsx
-// Stripe redirects here after payment — verifies payment via /api/verify-payment
+// app/success.tsx — Stripe redirects here after payment
+// Verifies payment + clears cart
 
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Linking,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Linking,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../context/AuthContext";
 import { BACKEND, C } from "../lib/theme";
 
 const IS_WEB = Platform.OS === "web";
-
-type Status = "loading" | "success" | "transfer_failed" | "error";
+type Status = "loading" | "success" | "error";
 
 export default function SuccessScreen() {
-  const { session_id, token_id } = useLocalSearchParams<{
+  const { session_id, token_id, token_ids } = useLocalSearchParams<{
     session_id: string;
     token_id: string;
+    token_ids: string;
   }>();
-
+  const { clearCart } = useAuth();
   const [status, setStatus] = useState<Status>("loading");
   const [data, setData] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState("");
@@ -41,15 +42,15 @@ export default function SuccessScreen() {
         `${BACKEND}/api/verify-payment?session_id=${session_id}`,
       );
       const json = await res.json();
-
       if (!json.paid) {
         setErrorMsg("Payment could not be verified.");
         setStatus("error");
         return;
       }
-
       setData(json);
-      setStatus(json.transferFailed ? "transfer_failed" : "success");
+      setStatus("success");
+      // ── Clear cart after successful payment ──
+      await clearCart();
     } catch (e: any) {
       setErrorMsg(e.message || "Connection error.");
       setStatus("error");
@@ -59,14 +60,6 @@ export default function SuccessScreen() {
   const short = (addr: string) =>
     addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : "—";
 
-  const openExplorer = () => {
-    const url =
-      "https://stellar.expert/explorer/testnet/contract/CB7GCGWAHWCF3SAJTYCR7JEFINLJBKA3LV7BZNAI46OXYPYZSTFZ6EMB";
-    if (IS_WEB) window.open(url, "_blank");
-    else Linking.openURL(url);
-  };
-
-  // ── Loading ──
   if (status === "loading")
     return (
       <View style={s.screen}>
@@ -75,18 +68,14 @@ export default function SuccessScreen() {
       </View>
     );
 
-  // ── Error ──
   if (status === "error")
     return (
       <View style={s.screen}>
-        <View style={s.iconError}>
-          <Text style={s.iconTxt}>✕</Text>
-        </View>
         <Text style={s.eyebrow}>Michael By Christian</Text>
-        <Text style={s.title}>Could Not{"\n"}Verify Order</Text>
+        <Text style={s.title}>Could Not Verify Order</Text>
         <Text style={s.bodyTxt}>
           {errorMsg ||
-            "Could not verify your order. If you completed a purchase your payment is safe — please contact support."}
+            "If you completed a purchase, your payment is safe. Please contact support."}
         </Text>
         <TouchableOpacity
           style={s.btnPrimary}
@@ -103,74 +92,13 @@ export default function SuccessScreen() {
       </View>
     );
 
-  // ── Transfer failed — paid but NFT not transferred yet ──
-  if (status === "transfer_failed")
-    return (
-      <SafeAreaView style={s.root}>
-        <ScrollView contentContainerStyle={s.scroll}>
-          <View style={s.card}>
-            <View style={s.iconError}>
-              <Text style={s.iconTxt}>⚠</Text>
-            </View>
-            <Text style={s.eyebrow}>Michael By Christian</Text>
-            <Text style={s.title}>Payment Received —{"\n"}Transfer Issue</Text>
-            <Text style={s.bodyTxt}>
-              Your card was charged successfully, but we encountered an issue
-              transferring your NFT.{" "}
-              <Text style={{ color: C.cream, fontWeight: "600" }}>
-                You have not lost your money.
-              </Text>{" "}
-              We will resolve this and contact you within 24 hours.
-            </Text>
-            <View style={s.errorBox}>
-              <Text style={s.errorBoxTitle}>What happened</Text>
-              <Text style={s.errorBoxMsg}>
-                {data?.transferError ||
-                  "The NFT transfer could not be completed at this time."}
-              </Text>
-            </View>
-            <View style={s.detailBox}>
-              {[
-                ["Piece", data?.pieceName || `MBC Token #${token_id}`],
-                [
-                  "Amount Charged",
-                  data?.amount ? `$${(data.amount / 100).toFixed(0)} USD` : "—",
-                ],
-                ["Email", data?.buyerEmail || "—"],
-                ["Status", "Transfer Pending"],
-              ].map(([k, v]) => (
-                <View key={k} style={s.detailRow}>
-                  <Text style={s.detailKey}>{k}</Text>
-                  <Text
-                    style={[s.detailVal, k === "Status" && { color: C.red }]}
-                  >
-                    {v}
-                  </Text>
-                </View>
-              ))}
-            </View>
-            <TouchableOpacity
-              style={s.btnPrimary}
-              onPress={() =>
-                Linking.openURL(
-                  `mailto:youngcompltd@gmail.com?subject=MBC Order Issue - Token ${token_id}`,
-                )
-              }
-            >
-              <Text style={s.btnPrimaryTxt}>Contact Support Now</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.btnSecondary}
-              onPress={() => router.replace("/")}
-            >
-              <Text style={s.btnSecondaryTxt}>← Back to MBC</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    );
+  // Multiple tokens purchased
+  const tokenList = token_ids
+    ? token_ids.split(",")
+    : token_id
+      ? [token_id]
+      : [];
 
-  // ── Success ──
   return (
     <SafeAreaView style={s.root}>
       <ScrollView contentContainerStyle={s.scroll}>
@@ -180,37 +108,76 @@ export default function SuccessScreen() {
           </View>
           <Text style={s.eyebrow}>Michael By Christian</Text>
           <Text style={s.title}>
-            You now own{"\n"}
-            <Text style={s.titleEm}>{data?.pieceName || "an MBC piece"}</Text>
+            {tokenList.length > 1
+              ? `${tokenList.length} Pieces Secured`
+              : `You now own\n`}
+            {tokenList.length === 1 && (
+              <Text style={s.titleEm}>{data?.pieceName || "an MBC piece"}</Text>
+            )}
           </Text>
           <Text style={s.bodyTxt}>
-            Your payment is confirmed. Your order is being processed and you
-            will receive a confirmation email shortly.
+            {tokenList.length > 1
+              ? `Your ${tokenList.length} NFTs have been queued for delivery. A confirmation email is on its way.`
+              : "Your NFT has been transferred to your Stellar wallet. A confirmation email is on its way."}
           </Text>
 
           <View style={s.detailBox}>
-            {[
-              ["Piece", data?.pieceName || "—"],
-              ["Token ID", `#${data?.tokenId || token_id}`],
-              ["Email", data?.buyerEmail || "—"],
-              [
-                "Amount Paid",
-                data?.amount ? `${(data.amount / 100).toFixed(0)} USD` : "—",
-              ],
-              ["Status", "Confirmed ✓"],
-            ].map(([k, v]) => (
-              <View key={k} style={s.detailRow}>
-                <Text style={s.detailKey}>{k}</Text>
-                <Text style={[s.detailVal, { color: C.goldLt }]}>{v}</Text>
-              </View>
-            ))}
+            {tokenList.length > 1 ? (
+              <>
+                <View style={s.detailRow}>
+                  <Text style={s.detailKey}>Pieces</Text>
+                  <Text style={[s.detailVal, { color: C.goldLt }]}>
+                    {tokenList.length} items
+                  </Text>
+                </View>
+                <View style={s.detailRow}>
+                  <Text style={s.detailKey}>Token IDs</Text>
+                  <Text style={[s.detailVal, { color: C.goldLt }]}>
+                    #{tokenList.join(", #")}
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={s.detailRow}>
+                  <Text style={s.detailKey}>Piece</Text>
+                  <Text style={[s.detailVal, { color: C.goldLt }]}>
+                    {data?.pieceName || "—"}
+                  </Text>
+                </View>
+                <View style={s.detailRow}>
+                  <Text style={s.detailKey}>Token ID</Text>
+                  <Text style={[s.detailVal, { color: C.goldLt }]}>
+                    #{data?.tokenId || token_id}
+                  </Text>
+                </View>
+              </>
+            )}
+            <View style={s.detailRow}>
+              <Text style={s.detailKey}>Amount Paid</Text>
+              <Text style={[s.detailVal, { color: C.goldLt }]}>
+                {data?.amount ? `$${(data.amount / 100).toFixed(0)} USD` : "—"}
+              </Text>
+            </View>
+            <View style={s.detailRow}>
+              <Text style={s.detailKey}>Blockchain</Text>
+              <Text style={[s.detailVal, { color: C.goldLt }]}>
+                Stellar · Soroban
+              </Text>
+            </View>
           </View>
 
           <TouchableOpacity
-            style={s.btnSecondary}
-            onPress={() => router.replace("/")}
+            style={s.btnPrimary}
+            onPress={() => router.replace("/collection" as any)}
           >
-            <Text style={s.btnSecondaryTxt}>← Back to MBC</Text>
+            <Text style={s.btnPrimaryTxt}>Continue Browsing →</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.btnSecondary}
+            onPress={() => router.replace("/profile" as any)}
+          >
+            <Text style={s.btnSecondaryTxt}>View My Pieces</Text>
           </TouchableOpacity>
           <Text style={s.supportNote}>
             Your physical bag will be shipped once we receive your address.
@@ -253,7 +220,6 @@ const s = StyleSheet.create({
     padding: 40,
     alignItems: "center",
   },
-
   iconSuccess: {
     width: 64,
     height: 64,
@@ -265,19 +231,7 @@ const s = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 24,
   },
-  iconError: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "rgba(192,97,74,0.15)",
-    borderWidth: 1,
-    borderColor: C.red,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
-  },
   iconTxt: { fontSize: 26, color: C.cream },
-
   eyebrow: {
     fontSize: 8,
     letterSpacing: 4,
@@ -309,7 +263,6 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.muted,
   },
-
   detailBox: {
     width: "100%",
     borderWidth: 1,
@@ -335,24 +288,6 @@ const s = StyleSheet.create({
     maxWidth: "60%",
     textAlign: "right",
   },
-
-  errorBox: {
-    width: "100%",
-    backgroundColor: "rgba(192,97,74,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(192,97,74,0.3)",
-    padding: 16,
-    marginBottom: 20,
-  },
-  errorBoxTitle: {
-    fontSize: 9,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: C.red,
-    marginBottom: 8,
-  },
-  errorBoxMsg: { fontSize: 12, color: C.muted, lineHeight: 18 },
-
   btnPrimary: {
     width: "100%",
     backgroundColor: C.gold,

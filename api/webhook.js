@@ -117,7 +117,10 @@ async function sendConfirmationEmail({
     body: JSON.stringify({
       from: "MBC Michael By Christian <onboarding@resend.dev>",
       to: [to],
-      subject: `Order Confirmed — ${pieceName} · MBC`,
+      subject:
+        tokenIds.length > 1
+          ? `Order Confirmed — ${tokenIds.length} Pieces · MBC`
+          : `Order Confirmed — ${pieceName} · MBC`,
       html,
     }),
   });
@@ -156,11 +159,28 @@ module.exports = async (req, res) => {
   if (session.payment_status !== "paid")
     return res.status(200).json({ received: true });
 
-  const tokenId = session.metadata?.token_id;
-  const pieceName = session.metadata?.bag_name || `MBC Token #${tokenId}`;
+  // Support both single token_id and multi-item token_ids
+  const tokenIdsRaw = session.metadata?.token_ids || session.metadata?.token_id;
+  const tokenIds = tokenIdsRaw
+    ? String(tokenIdsRaw)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+  const tokenId = tokenIds[0]; // primary token for backwards compat
+  const bagNamesRaw =
+    session.metadata?.bag_names || session.metadata?.bag_name || "";
+  const bagNames = bagNamesRaw
+    .split("|")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const pieceName = bagNames[0] || `MBC Token #${tokenId}`;
   const buyerEmail = session.customer_details?.email;
   const buyerName = session.customer_details?.name;
   const amountPaid = session.amount_total;
+  // Per-item amount (split evenly if multi-item — Stripe doesn't break it out)
+  const perItemAmount =
+    tokenIds.length > 1 ? Math.round(amountPaid / tokenIds.length) : amountPaid;
 
   let shippingAddress = null;
   let shippingSameAsBilling = false;
@@ -213,28 +233,37 @@ module.exports = async (req, res) => {
     shippingSameAsBilling = true;
   }
 
-  // ── Mark token as sold in KV + record XLM price ──
+  // ── Mark ALL tokens as sold in KV + record XLM price ──
+  let xlmPriceAtPurchase = null;
   try {
-    let xlmPriceAtPurchase = null;
-    let xlmEquivalent = null;
+    xlmPriceAtPurchase = await fetchXLMPrice();
+  } catch (priceErr) {
+    console.log("XLM price fetch failed:", priceErr.message);
+  }
+
+  for (let idx = 0; idx < tokenIds.length; idx++) {
+    const tid = tokenIds[idx];
+    const itemAmount = perItemAmount;
+    const xlmEquivalent = xlmPriceAtPurchase
+      ? itemAmount / 100 / xlmPriceAtPurchase
+      : null;
+    const itemName = bagNames[idx] || `MBC Token #${tid}`;
     try {
-      xlmPriceAtPurchase = await fetchXLMPrice();
-      xlmEquivalent = amountPaid / 100 / xlmPriceAtPurchase;
-    } catch (priceErr) {
-      console.log("XLM price fetch failed:", priceErr.message);
+      await markTokenSold({
+        tokenId: Number(tid),
+        buyerEmail,
+        buyerName,
+        amount: itemAmount,
+        shippingAddress,
+        pieceName: itemName,
+        xlmPriceAtPurchase,
+        xlmEquivalent,
+        xlmPriceBaseline: xlmPriceAtPurchase,
+      });
+      console.log(`Marked token ${tid} as sold`);
+    } catch (kvErr) {
+      console.error(`KV mark-sold failed for token ${tid}:`, kvErr.message);
     }
-    await markTokenSold({
-      tokenId: Number(tokenId),
-      buyerEmail,
-      buyerName,
-      amount: amountPaid,
-      shippingAddress,
-      xlmPriceAtPurchase,
-      xlmEquivalent,
-      xlmPriceBaseline: xlmPriceAtPurchase,
-    });
-  } catch (kvErr) {
-    console.error("KV mark-sold failed:", kvErr.message);
   }
 
   // ── Send confirmation email to buyer ──
@@ -266,7 +295,10 @@ module.exports = async (req, res) => {
       body: JSON.stringify({
         from: "MBC Store <onboarding@resend.dev>",
         to: ["digwaldo@gmail.com"],
-        subject: `💰 New Sale — ${pieceName} · ${(amountPaid / 100).toFixed(0)} USD`,
+        subject:
+          tokenIds.length > 1
+            ? `💰 New Sale — ${tokenIds.length} Pieces · ${(amountPaid / 100).toFixed(0)} USD`
+            : `💰 New Sale — ${pieceName} · ${(amountPaid / 100).toFixed(0)} USD`,
         html: `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#0C0B09;font-family:Helvetica,Arial,sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:40px 20px;">

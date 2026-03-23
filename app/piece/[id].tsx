@@ -160,7 +160,7 @@ type PageState =
 export default function PieceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const tokenId = Number(id);
-  const { session, addToCart, isInCart, profile } = useAuth();
+  const { session, addToCart, isInCart, profile, cart } = useAuth();
 
   const [data, setData] = useState<any | null>(null);
   const [pageState, setPageState] = useState<PageState>("loading");
@@ -240,15 +240,56 @@ export default function PieceScreen() {
     setBuyStep("checking");
     setBuyError("");
     try {
+      // If there are items already in cart, check if this piece is one of them.
+      // If not, add it first, then checkout the full cart.
+      // If cart is empty, just checkout this single piece.
+      const cartItems = cart.length > 0 ? cart : null;
+      const thisItemInCart = isInCart(tokenId);
+
+      // Build the items list for checkout
+      let checkoutItems;
+      if (cartItems && cartItems.length > 0) {
+        // Cart has items — include them all
+        // If current piece is not in cart yet, add it to the checkout list too
+        const base = cartItems.map((i) => ({
+          tokenId: String(i.token_id),
+          name: i.bag_name,
+          price: i.price_usdc,
+          image: i.image,
+        }));
+        if (!thisItemInCart) {
+          base.push({
+            tokenId: String(tokenId),
+            name: data.name,
+            price: data.price_usdc,
+            image: imgUrl || null,
+          });
+        }
+        checkoutItems = base;
+      } else {
+        // No cart — just this piece
+        checkoutItems = [
+          {
+            tokenId: String(tokenId),
+            name: data.name,
+            price: data.price_usdc,
+            image: imgUrl || null,
+          },
+        ];
+      }
+
+      const successBase = IS_WEB
+        ? `${window.location.origin}/success`
+        : `${BACKEND}/success`;
+      const cancelBase = IS_WEB ? window.location.href : `${BACKEND}/`;
+
       const res = await fetch(`${BACKEND}/api/create-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tokenId: String(tokenId),
-          successUrl: IS_WEB
-            ? `${window.location.origin}/success`
-            : `${BACKEND}/success`,
-          cancelUrl: IS_WEB ? window.location.href : `${BACKEND}/`,
+          items: checkoutItems,
+          successUrl: successBase,
+          cancelUrl: cancelBase,
         }),
       });
       const json = await res.json();
@@ -262,7 +303,7 @@ export default function PieceScreen() {
       } else if (json.unavailable) {
         setBuyStep("unavailable");
         setBuyError(
-          "This piece is no longer available. No charge has been made.",
+          `Token #${json.tokenId || tokenId} is no longer available. No charge has been made.`,
         );
       } else {
         setBuyStep("error");
