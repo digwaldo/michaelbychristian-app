@@ -111,12 +111,10 @@ module.exports = async (req, res) => {
     try {
       const alreadySold = await isTokenSold(Number(tokenId));
       if (alreadySold) {
-        return res
-          .status(400)
-          .json({
-            error: "This piece has already been purchased.",
-            unavailable: true,
-          });
+        return res.status(400).json({
+          error: "This piece has already been purchased.",
+          unavailable: true,
+        });
       }
     } catch (kvErr) {
       console.log(

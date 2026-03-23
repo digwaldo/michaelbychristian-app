@@ -1,30 +1,21 @@
-// app/_layout.tsx
+// app/_layout.tsx — Root layout with AuthProvider
+
 import { Stack } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import { SafeAreaProvider } from "react-native-safe-area-context";
-import { C } from "../lib/theme";
+import { AuthProvider } from "../context/AuthContext";
 
 export default function RootLayout() {
   return (
-    <SafeAreaProvider>
-      <StatusBar style="light" backgroundColor={C.black} />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: C.black },
-          animation: "slide_from_right",
-          gestureEnabled: true,
-        }}
-      >
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="collection" options={{ headerShown: false }} />
-        <Stack.Screen name="piece/[id]" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="checkout"
-          options={{ headerShown: false, presentation: "modal" }}
-        />
-        <Stack.Screen name="profile" options={{ headerShown: false }} />
+    <AuthProvider>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="collection" />
+        <Stack.Screen name="piece/[id]" />
+        <Stack.Screen name="cart" />
+        <Stack.Screen name="auth" />
+        <Stack.Screen name="profile" />
+        <Stack.Screen name="rarity" />
+        <Stack.Screen name="success" />
       </Stack>
-    </SafeAreaProvider>
+    </AuthProvider>
   );
 }
