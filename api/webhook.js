@@ -270,7 +270,7 @@ module.exports = async (req, res) => {
   const sendTo = buyerEmail || "digwaldo@gmail.com";
   try {
     await sendConfirmationEmail({
-      to: sendTo,
+      to: ["digwaldo@gmail.com"], // hardcoded for now since buyer email can be unreliable
       buyerName,
       pieceName,
       tokenId,
