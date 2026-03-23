@@ -17,6 +17,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../context/AuthContext";
 import { BACKEND, C, CONTRACT, PASSPHRASE, RPC_URL } from "../lib/theme";
 
 const useClientLayout = () => {
@@ -299,6 +300,7 @@ function addRarity(items: NFTItem[]): NFTItem[] {
 
 export default function CollectionScreen() {
   const { isPhone, isWeb } = useClientLayout();
+  const { session, addToCart, isInCart, profile } = useAuth();
 
   const [all, setAll] = useState<NFTItem[]>([]);
   const [displayed, setDisplayed] = useState<NFTItem[]>([]);
@@ -561,6 +563,7 @@ export default function CollectionScreen() {
       .toUpperCase();
     const gainPercent =
       item.sold && soldGains[item.tokenId] ? soldGains[item.tokenId] : null;
+    const inCart = isInCart(item.tokenId);
 
     return (
       <TouchableOpacity
@@ -635,10 +638,8 @@ export default function CollectionScreen() {
               .filter(Boolean)
               .join(" · ") || "NFC Embedded"}
           </Text>
-          <Text style={s.cardSub2} numberOfLines={1}>
-            {[item.secondary_texture, item.secondary_color]
-              .filter(Boolean)
-              .join(" · ") || "NFC Embedded"}
+          <Text style={s.cardRarity} numberOfLines={1}>
+            Rarity Rank · #{item.rarity_rank}
           </Text>
         </View>
 
@@ -1287,8 +1288,9 @@ const s = StyleSheet.create({
     backgroundColor: "rgba(184,150,62,0.18)",
     borderWidth: 1,
     borderColor: "rgba(184,150,62,0.45)",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    maxWidth: "48%",
   },
   rarityRankBadge: {
     position: "absolute",
@@ -1297,12 +1299,13 @@ const s = StyleSheet.create({
     backgroundColor: "rgba(184,150,62,0.18)",
     borderWidth: 1,
     borderColor: "rgba(184,150,62,0.45)",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    maxWidth: "48%",
   },
   rarityBadgeTxt: {
-    fontSize: 7,
-    letterSpacing: 1.2,
+    fontSize: 6,
+    letterSpacing: 0.8,
     textTransform: "uppercase",
     color: C.goldLt,
     fontWeight: "700",
@@ -1323,11 +1326,11 @@ const s = StyleSheet.create({
     lineHeight: 17,
     marginBottom: 3,
   },
-  cardSub: { fontSize: 9, color: C.goldLt, letterSpacing: 0.5 },
-  cardSub2: {
+  cardSub: { fontSize: 9, color: C.muted, letterSpacing: 0.5 },
+  cardRarity: {
     marginTop: 4,
     fontSize: 9,
-    color: C.muted,
+    color: C.goldLt,
     letterSpacing: 0.3,
   },
   cardFoot: {
@@ -1354,6 +1357,17 @@ const s = StyleSheet.create({
     color: C.muted,
     marginTop: 1,
   },
+  cartBtn: {
+    width: 28,
+    height: 28,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cartBtnActive: { backgroundColor: C.gold, borderColor: C.gold },
+  cartBtnTxt: { fontSize: 14, color: C.muted, lineHeight: 18 },
+  cartBtnTxtActive: { color: C.black, fontWeight: "700" },
   buyBtn: {
     backgroundColor: C.black,
     paddingHorizontal: 10,

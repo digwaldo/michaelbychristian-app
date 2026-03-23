@@ -19,6 +19,8 @@ import {
   View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { CartIcon } from "../../components/CartIcon";
+import { useAuth } from "../../context/AuthContext";
 import {
   ADMIN_WALLET,
   BACKEND,
@@ -158,6 +160,7 @@ type PageState =
 export default function PieceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const tokenId = Number(id);
+  const { session, addToCart, isInCart, profile } = useAuth();
 
   const [data, setData] = useState<any | null>(null);
   const [pageState, setPageState] = useState<PageState>("loading");
@@ -375,13 +378,23 @@ export default function PieceScreen() {
           <View style={s.topBarCenter}>
             <Text style={s.topEye}>Michael By Christian</Text>
           </View>
-          <TouchableOpacity
-            onPress={() => router.push("/rarity" as any)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={{ width: 80, alignItems: "flex-end" }}
-          >
-            <Text style={s.rarityNavLink}>✦ Rarity</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+            <TouchableOpacity
+              onPress={() => router.push("/rarity" as any)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={s.rarityNavLink}>✦ Rarity</Text>
+            </TouchableOpacity>
+            <CartIcon />
+            <TouchableOpacity
+              onPress={() =>
+                router.push(session ? "/profile" : ("/auth" as any))
+              }
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={s.rarityNavLink}>{session ? "👤" : "Sign In"}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
 
@@ -404,7 +417,7 @@ export default function PieceScreen() {
             <Image
               source={{ uri: imgUrl }}
               style={s.img}
-              resizeMode="cover"
+              resizeMode={IS_WEB ? "contain" : "cover"}
               onError={() => setImgErr(true)}
             />
           ) : (
@@ -520,6 +533,42 @@ export default function PieceScreen() {
                 <Text style={s.rarityLabel}>Traits</Text>
                 <Text style={s.rarityVal}>{rarityData.traitCount}</Text>
               </View>
+            </View>
+          )}
+
+          {/* ── Add to Cart + Keep Shopping ── */}
+          {pageState === "listed" && (
+            <View style={{ flexDirection: "row", gap: 10, marginBottom: 10 }}>
+              <TouchableOpacity
+                style={[s.cartAddBtn, isInCart(tokenId) && s.cartAddBtnActive]}
+                onPress={() =>
+                  isInCart(tokenId)
+                    ? router.push("/cart" as any)
+                    : addToCart({
+                        token_id: tokenId,
+                        bag_name: data.name,
+                        price_usdc: data.price_usdc,
+                        image: imgUrl || null,
+                      })
+                }
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    s.cartAddBtnTxt,
+                    isInCart(tokenId) && { color: C.black },
+                  ]}
+                >
+                  {isInCart(tokenId) ? "✓ In Cart" : "+ Add to Cart"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={s.keepShoppingBtn}
+                onPress={() => router.push("/collection" as any)}
+                activeOpacity={0.85}
+              >
+                <Text style={s.keepShoppingBtnTxt}>← Keep Shopping</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -1016,7 +1065,7 @@ export default function PieceScreen() {
 }
 
 // ── Styles ─────────────────────────────────────────────────────
-const IMG_H = IS_WEB ? 480 : width;
+const IMG_H = IS_WEB ? Math.min(width * 0.6, 500) : width;
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.black },
@@ -1087,7 +1136,7 @@ const s = StyleSheet.create({
   imgWrap: {
     width: "100%",
     height: IMG_H,
-    backgroundColor: C.warm,
+    backgroundColor: IS_WEB ? C.black : C.warm,
     overflow: "hidden",
   },
   img: { width: "100%", height: "100%" },
@@ -1287,6 +1336,34 @@ const s = StyleSheet.create({
     color: C.muted,
   },
 
+  cartAddBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: C.gold,
+    padding: 16,
+    alignItems: "center",
+  },
+  cartAddBtnActive: { backgroundColor: C.gold },
+  cartAddBtnTxt: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.gold,
+  },
+  keepShoppingBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 16,
+    alignItems: "center",
+  },
+  keepShoppingBtnTxt: {
+    fontSize: 10,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: C.muted,
+  },
   buyBtn: {
     backgroundColor: C.gold,
     padding: 18,

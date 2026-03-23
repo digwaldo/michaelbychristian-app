@@ -16,6 +16,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../context/AuthContext";
 import { C } from "../lib/theme";
 
 const useClientLayout = () => {
@@ -248,6 +249,7 @@ export default function HomeScreen() {
   const layout = useClientLayout();
   const { w, h, isPhone, isTablet, isWeb, isWebWide } = layout;
   const [menuOpen, setMenuOpen] = useState(false);
+  const { session } = useAuth();
   const fade = useRef(new Animated.Value(0)).current;
   const slideY = useRef(new Animated.Value(24)).current;
   const player = useVideoPlayer(require("../assets/hero-video.mp4"));
@@ -288,14 +290,17 @@ export default function HomeScreen() {
   const h2Size = isPhone ? 28 : 36;
   const maxW = isWeb ? 760 : undefined;
 
-  // ── NAV_LINKS — Rarity added ──────────────────────────────────
+  // ── NAV_LINKS — My Pieces only shown when logged in ──────────
   const NAV_LINKS = [
     { label: "Collection", path: "/collection" },
     { label: "Rarity", path: "/rarity", gold: true },
     { label: "Community", path: "/community" },
     { label: "Gallery", path: "/gallery" },
     { label: "About", path: "/about" },
-    { label: "My Pieces", path: "/profile" },
+    // My Pieces: show if logged in, else show Sign In
+    session
+      ? { label: "My Pieces", path: "/profile" }
+      : { label: "Sign In", path: "/auth" },
   ];
 
   const COLS = isPhone ? 2 : 3;
