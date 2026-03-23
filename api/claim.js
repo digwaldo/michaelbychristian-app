@@ -1,9 +1,8 @@
 // api/claim.js
 // POST /api/claim
 // Verifies buyer email matches sale record, then transfers NFT to their wallet
-// Called from /piece/[id] claim section after purchase
 
-const { getTokenSaleData, markTokenClaimed } = require("./mark-sold");
+const { getTokenSaleData, markTokenClaimed } = require("./sold");
 const StellarSdk = require("@stellar/stellar-sdk");
 
 const STELLAR_CONTRACT =
@@ -71,7 +70,6 @@ module.exports = async (req, res) => {
     return res.status(400).json({ error: "tokenId and buyerEmail required" });
 
   try {
-    // 1. Verify this buyer actually purchased this token
     const saleData = await getTokenSaleData(Number(tokenId));
     if (!saleData)
       return res
@@ -84,12 +82,13 @@ module.exports = async (req, res) => {
         .json({ error: "Email does not match purchase record" });
 
     if (saleData.claimed)
-      return res.status(400).json({
-        error: "This token has already been claimed",
-        buyerWallet: saleData.buyerWallet,
-      });
+      return res
+        .status(400)
+        .json({
+          error: "This token has already been claimed",
+          buyerWallet: saleData.buyerWallet,
+        });
 
-    // 2. Resolve wallet — use provided or create custodial
     let wallet = walletAddress?.trim();
     let custodialSecret = null;
     let isCustodial = false;
@@ -107,15 +106,10 @@ module.exports = async (req, res) => {
       }
     }
 
-    // 3. Transfer NFT
     const transfer = await transferNFT(tokenId, wallet);
-
-    // 4. Mark as claimed in KV
     await markTokenClaimed({ tokenId: Number(tokenId), buyerWallet: wallet });
 
-    // 5. Send wallet details email if custodial
     if (isCustodial && process.env.RESEND_API_KEY) {
-      const { Stripe } = require("stripe"); // just for reference, not used
       await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
@@ -149,13 +143,15 @@ module.exports = async (req, res) => {
       });
     }
 
-    return res.status(200).json({
-      success: true,
-      txHash: transfer.hash,
-      buyerWallet: wallet,
-      isCustodial,
-      custodialSecret: isCustodial ? custodialSecret : null,
-    });
+    return res
+      .status(200)
+      .json({
+        success: true,
+        txHash: transfer.hash,
+        buyerWallet: wallet,
+        isCustodial,
+        custodialSecret: isCustodial ? custodialSecret : null,
+      });
   } catch (err) {
     console.error("Claim error:", err.message);
     return res.status(500).json({ error: err.message });

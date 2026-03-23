@@ -1,14 +1,13 @@
 // api/create-checkout.js
 // Uses raw Stellar SDK simulation — same approach as collection.tsx and [id].tsx
-// No contract-client dependency needed
 
 const Stripe = require("stripe");
 
-// Patch BigInt serialization globally — Stellar SDK uses BigInt internally
 BigInt.prototype.toJSON = function () {
   return this.toString();
 };
-const { isTokenSold } = require("./mark-sold");
+
+const { isTokenSold } = require("./sold");
 const StellarSdk = require("@stellar/stellar-sdk");
 const {
   rpc,
@@ -38,7 +37,6 @@ function setCORS(res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
-// ── Same simulation pattern as collection.tsx ─────────────────
 async function simulate(fn, args = []) {
   const server = new rpc.Server(STELLAR_RPC);
   const contract = new Contract(STELLAR_CONTRACT);
@@ -72,27 +70,20 @@ async function checkBagAvailability(tokenId) {
     simulate("owner_of", [tokenArg]).catch(() => null),
   ]);
 
-  console.log("full_token_data result:", JSON.stringify(raw).slice(0, 200));
-  console.log("owner_of result:", ownerRaw);
   if (!raw) throw new Error(`Token #${tokenId} not found on contract`);
 
-  // Check admin wallet still owns it
   const owner = ownerRaw ? String(ownerRaw).trim() : null;
   const ownedByAdmin =
     !owner || owner.toUpperCase() === ADMIN_WALLET.toUpperCase();
 
-  if (!ownedByAdmin) {
+  if (!ownedByAdmin)
     throw new Error(
       `Token #${tokenId} is no longer available — it has already been purchased`,
     );
-  }
-
-  if (raw.listed === false) {
+  if (raw.listed === false)
     throw new Error(`Token #${tokenId} is not currently listed for sale`);
-  }
 
   const t = raw.traits || {};
-
   return {
     name: raw.name || `MBC Token #${tokenId}`,
     price_usdc: raw.price_usdc ? Number(raw.price_usdc) : 20000,
@@ -105,7 +96,6 @@ async function checkBagAvailability(tokenId) {
   };
 }
 
-// ── Handler ───────────────────────────────────────────────────
 module.exports = async (req, res) => {
   setCORS(res);
   if (req.method === "OPTIONS") return res.status(200).end();
@@ -118,14 +108,15 @@ module.exports = async (req, res) => {
     const { tokenId, successUrl, cancelUrl } = req.body;
     if (!tokenId) return res.status(400).json({ error: "tokenId is required" });
 
-    // ── Check KV sold list first (fast, no Stellar call needed) ──
     try {
       const alreadySold = await isTokenSold(Number(tokenId));
       if (alreadySold) {
-        return res.status(400).json({
-          error: "This piece has already been purchased.",
-          unavailable: true,
-        });
+        return res
+          .status(400)
+          .json({
+            error: "This piece has already been purchased.",
+            unavailable: true,
+          });
       }
     } catch (kvErr) {
       console.log(
@@ -139,14 +130,13 @@ module.exports = async (req, res) => {
       bag = await checkBagAvailability(Number(tokenId));
     } catch (availErr) {
       console.log(`Token ${tokenId} unavailable: ${availErr.message}`);
-      return res.status(400).json({
-        error: availErr.message,
-        unavailable: true,
-      });
+      return res
+        .status(400)
+        .json({ error: availErr.message, unavailable: true });
     }
 
     const origin =
-      req.headers.origin || "https://michael-by-christian.vercel.app";
+      req.headers.origin || "https://michaelbychristian-app.vercel.app";
     const baseSuccessUrl = successUrl || `${origin}/success`;
     const baseCancelUrl = cancelUrl || `${origin}/`;
 
@@ -169,12 +159,10 @@ module.exports = async (req, res) => {
         },
       ],
       mode: "payment",
+      allow_promotion_codes: true,
       success_url: `${baseSuccessUrl}?session_id={CHECKOUT_SESSION_ID}&token_id=${tokenId}`,
       cancel_url: baseCancelUrl,
-      metadata: {
-        token_id: String(tokenId),
-        bag_name: bag.name,
-      },
+      metadata: { token_id: String(tokenId), bag_name: bag.name },
       shipping_address_collection: {
         allowed_countries: [
           "US",

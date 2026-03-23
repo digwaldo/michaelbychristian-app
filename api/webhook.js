@@ -6,17 +6,15 @@ const Stripe = require("stripe");
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const { markTokenSold } = require("./mark-sold");
+const { markTokenSold } = require("./sold");
 const { fetchXLMPrice } = require("./xlm-price");
 
 module.exports.config = { api: { bodyParser: false } };
 
-// Clean address field — strip Stripe placeholder values
 function cleanField(val) {
   if (!val) return null;
   const v = val.trim();
   if (!v) return null;
-  // Strip any variation of Stripe's placeholder text
   if (v.toLowerCase().replace(/\s+/g, "").includes("pleaseselect")) return null;
   if (v === "N/A" || v === "n/a") return null;
   return v;
@@ -158,9 +156,6 @@ module.exports = async (req, res) => {
   if (session.payment_status !== "paid")
     return res.status(200).json({ received: true });
 
-  // LOG FULL SESSION FOR DEBUGGING
-  console.log("FULL SESSION:", JSON.stringify(session, null, 2));
-
   const tokenId = session.metadata?.token_id;
   const pieceName = session.metadata?.bag_name || `MBC Token #${tokenId}`;
   const buyerEmail = session.customer_details?.email;
@@ -170,12 +165,10 @@ module.exports = async (req, res) => {
   let shippingAddress = null;
   let shippingSameAsBilling = false;
 
-  // Stripe puts real shipping in collected_information.shipping_details
   const shippingSrc =
     session.collected_information?.shipping_details ||
     session.shipping_details ||
     null;
-
   if (shippingSrc?.address) {
     const a = shippingSrc.address;
     const cityStateZip = [
@@ -196,7 +189,6 @@ module.exports = async (req, res) => {
       .join("\n");
   }
 
-  // Billing — use customer_details.address but skip --please select-- city
   let billingAddress = null;
   if (session.customer_details?.address) {
     const b = session.customer_details.address;
@@ -217,21 +209,17 @@ module.exports = async (req, res) => {
     if (billingLines.length > 1) billingAddress = billingLines.join("\n");
   }
 
-  // If billing and shipping are the same address, note it
   if (shippingAddress && billingAddress && shippingAddress === billingAddress) {
     shippingSameAsBilling = true;
   }
 
-  // ── Mark token as sold in KV immediately + record XLM price ──
+  // ── Mark token as sold in KV + record XLM price ──
   try {
     let xlmPriceAtPurchase = null;
     let xlmEquivalent = null;
     try {
       xlmPriceAtPurchase = await fetchXLMPrice();
       xlmEquivalent = amountPaid / 100 / xlmPriceAtPurchase;
-      console.log(
-        `XLM price at purchase: ${xlmPriceAtPurchase}, equivalent: ${xlmEquivalent} XLM`,
-      );
     } catch (priceErr) {
       console.log("XLM price fetch failed:", priceErr.message);
     }
@@ -250,9 +238,6 @@ module.exports = async (req, res) => {
   }
 
   // ── Send confirmation email to buyer ──
-  // NOTE: Resend requires verified domain to send to arbitrary emails.
-  // Until domain is verified, buyer email goes to digwaldo@gmail.com.
-  // Once domain verified, change "digwaldo@gmail.com" back to buyerEmail.
   const sendTo = buyerEmail || "digwaldo@gmail.com";
   try {
     await sendConfirmationEmail({
@@ -296,39 +281,16 @@ module.exports = async (req, res) => {
         <p style="font-size:9px;letter-spacing:0.3em;text-transform:uppercase;color:#B8963E;margin:0;">Order Details</p>
       </div>
       <div>
-        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
-          <span style="font-size:12px;color:#7A7060;">Piece: </span>
-          <span style="font-size:12px;color:#D4AF6A;">${pieceName}</span>
-        </div>
-        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
-          <span style="font-size:12px;color:#7A7060;">Token ID: </span>
-          <span style="font-size:12px;color:#F5EFE0;">#${tokenId}</span>
-        </div>
-        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
-          <span style="font-size:12px;color:#7A7060;">Amount: </span>
-          <span style="font-size:12px;color:#5BAF85;">${(amountPaid / 100).toFixed(0)} USD</span>
-        </div>
-        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
-          <span style="font-size:12px;color:#7A7060;">Buyer: </span>
-          <span style="font-size:12px;color:#F5EFE0;">${buyerName || "—"}</span>
-        </div>
-        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
-          <span style="font-size:12px;color:#7A7060;">Buyer Email: </span>
-          <span style="font-size:12px;color:#F5EFE0;">${buyerEmail || "—"}</span>
-        </div>
-        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
-          <span style="font-size:12px;color:#7A7060;">Shipping${shippingSameAsBilling ? " (Same as Billing)" : ""}: </span>
-          <span style="font-size:12px;color:#F5EFE0;white-space:pre-line;">${shippingAddress || "Not provided yet"}</span>
-        </div>
-        <div style="padding:10px 20px;">
-          <span style="font-size:12px;color:#7A7060;">Billing: </span>
-          <span style="font-size:12px;color:#F5EFE0;white-space:pre-line;">${billingAddress || "Not provided yet"}</span>
-        </div>
+        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);"><span style="font-size:12px;color:#7A7060;">Piece: </span><span style="font-size:12px;color:#D4AF6A;">${pieceName}</span></div>
+        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);"><span style="font-size:12px;color:#7A7060;">Token ID: </span><span style="font-size:12px;color:#F5EFE0;">#${tokenId}</span></div>
+        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);"><span style="font-size:12px;color:#7A7060;">Amount: </span><span style="font-size:12px;color:#5BAF85;">${(amountPaid / 100).toFixed(0)} USD</span></div>
+        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);"><span style="font-size:12px;color:#7A7060;">Buyer: </span><span style="font-size:12px;color:#F5EFE0;">${buyerName || "—"}</span></div>
+        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);"><span style="font-size:12px;color:#7A7060;">Buyer Email: </span><span style="font-size:12px;color:#F5EFE0;">${buyerEmail || "—"}</span></div>
+        <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);"><span style="font-size:12px;color:#7A7060;">Shipping${shippingSameAsBilling ? " (Same as Billing)" : ""}: </span><span style="font-size:12px;color:#F5EFE0;white-space:pre-line;">${shippingAddress || "Not provided yet"}</span></div>
+        <div style="padding:10px 20px;"><span style="font-size:12px;color:#7A7060;">Billing: </span><span style="font-size:12px;color:#F5EFE0;white-space:pre-line;">${billingAddress || "Not provided yet"}</span></div>
       </div>
     </div>
-    <p style="font-size:12px;color:#7A7060;text-align:center;">
-      View in <a href="https://dashboard.stripe.com/test/payments" style="color:#B8963E;">Stripe Dashboard</a>
-    </p>
+    <p style="font-size:12px;color:#7A7060;text-align:center;">View in <a href="https://dashboard.stripe.com/test/payments" style="color:#B8963E;">Stripe Dashboard</a></p>
   </div>
 </div></body></html>`,
       }),
