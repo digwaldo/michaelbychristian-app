@@ -592,14 +592,14 @@ export default function CollectionScreen() {
 
         {/* ── Card footer — hide price when sold ── */}
         <View style={s.cardFoot}>
-          {!item.sold ? (
-            <View>
-              <Text style={s.cardPrice}>{formatPrice(item.price_usdc)}</Text>
-              <Text style={s.cardCurrency}>USD</Text>
-            </View>
-          ) : (
-            <View />
-          )}
+          <View style={s.cardPriceBox}>
+            {!item.sold ? (
+              <>
+                <Text style={s.cardPrice}>{formatPrice(item.price_usdc)}</Text>
+                <Text style={s.cardCurrency}>USD</Text>
+              </>
+            ) : null}
+          </View>
           {!item.sold ? (
             <TouchableOpacity
               style={s.buyBtn}
@@ -1288,6 +1288,7 @@ const s = StyleSheet.create({
     borderTopColor: C.border,
     backgroundColor: C.warm,
   },
+  cardPriceBox: { minHeight: 36, justifyContent: "center" },
   cardPrice: {
     fontFamily: "serif",
     fontSize: 16,
