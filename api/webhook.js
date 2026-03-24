@@ -1,13 +1,21 @@
 // api/webhook.js
-// Receives Stripe payment confirmations, sends confirmation emails
-// Handles both single and multi-item cart purchases
+// Stripe payment webhook
+// If buyer has MBC account with wallet → transfer NFT immediately + mark claimed
+// If guest → mark sold only, send claim link email
 
 const Stripe = require("stripe");
-
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const { markTokenSold } = require("./sold");
+const { markTokenSold, markTokenClaimed } = require("./sold");
 const { fetchXLMPrice } = require("./xlm-price");
+const { createClient } = require("@supabase/supabase-js");
+const StellarSdk = require("@stellar/stellar-sdk");
+
+const supabaseAdmin = createClient(
+  process.env.EXPO_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY,
+  { auth: { autoRefreshToken: false, persistSession: false } },
+);
 
 module.exports.config = { api: { bodyParser: false } };
 
@@ -32,33 +40,94 @@ function getRawBody(req) {
   });
 }
 
-// ── Build order rows HTML for a list of items ─────────────────
+// ── Look up buyer's wallet from Supabase by email ─────────────
+async function getBuyerWallet(email) {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("profiles")
+      .select("stellar_wallet_public")
+      .eq("email", email.toLowerCase())
+      .single();
+    if (error || !data?.stellar_wallet_public) return null;
+    return data.stellar_wallet_public;
+  } catch (e) {
+    console.log("getBuyerWallet error:", e.message);
+    return null;
+  }
+}
+
+// ── Transfer NFT on Stellar ───────────────────────────────────
+async function transferNFT(tokenId, buyerWallet) {
+  const STELLAR_CONTRACT =
+    process.env.STELLAR_CONTRACT_ID ||
+    "CB7GCGWAHWCF3SAJTYCR7JEFINLJBKA3LV7BZNAI46OXYPYZSTFZ6EMB";
+  const STELLAR_RPC =
+    process.env.STELLAR_RPC_URL || "https://soroban-testnet.stellar.org";
+  const STELLAR_PASSPHRASE =
+    process.env.STELLAR_NETWORK_PASSPHRASE ||
+    "Test SDF Network ; September 2015";
+  const ADMIN_SECRET = process.env.STELLAR_ADMIN_SECRET;
+
+  const { basicNodeSigner } = require("@stellar/stellar-sdk/contract");
+  const adminKeypair = StellarSdk.Keypair.fromSecret(ADMIN_SECRET);
+  const adminPublic = adminKeypair.publicKey();
+  const { signTransaction } = basicNodeSigner(adminKeypair, STELLAR_PASSPHRASE);
+  const { Client } = await import("../contract-client/dist/index.js");
+
+  const client = new Client({
+    contractId: STELLAR_CONTRACT,
+    networkPassphrase: STELLAR_PASSPHRASE,
+    rpcUrl: STELLAR_RPC,
+    publicKey: adminPublic,
+    signTransaction,
+  });
+
+  const tx = await client.transfer({
+    from: adminPublic,
+    to: buyerWallet,
+    token_id: BigInt(tokenId),
+  });
+
+  const result = await tx.signAndSend();
+  console.log(`Token ${tokenId} transferred to ${buyerWallet}: ${result.hash}`);
+  return result.hash;
+}
+
+// ── Build item rows for emails ────────────────────────────────
 function buildItemRows(items) {
   return items
     .map(
       (item, i) => `
     <div style="padding:14px 20px;border-bottom:1px solid rgba(184,150,62,0.1);background:${i % 2 === 0 ? "#1A1916" : "#141210"};">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <div style="margin-bottom:4px;">
         <span style="font-size:13px;color:#D4AF6A;font-weight:600;">${item.name}</span>
-        <span style="font-size:12px;color:#5BAF85;">$${(item.amount / 100).toFixed(0)} USD</span>
+        <span style="font-size:11px;color:#5BAF85;float:right;">$${(item.amount / 100).toFixed(0)} USD</span>
       </div>
       <span style="font-size:11px;color:#7A7060;">Token #${item.tokenId}</span>
+      ${item.txHash ? `<span style="font-size:10px;color:#5BAF85;margin-left:10px;">✦ NFT Transferred</span>` : ""}
     </div>
   `,
     )
     .join("");
 }
 
-// ── Build claim buttons for each item ─────────────────────────
-function buildClaimButtons(items) {
+// ── Build claim/view buttons per item ─────────────────────────
+function buildActionButtons(items, hasWallet) {
   return items
     .map(
       (item) => `
     <div style="margin-bottom:12px;padding:16px;background:#1A1916;border:1px solid rgba(184,150,62,0.2);">
-      <p style="font-size:11px;color:#B8963E;margin:0 0 8px;letter-spacing:0.15em;text-transform:uppercase;">${item.name} · Token #${item.tokenId}</p>
+      <p style="font-size:11px;color:#B8963E;margin:0 0 4px;letter-spacing:0.15em;text-transform:uppercase;">
+        ${item.name} · Token #${item.tokenId}
+      </p>
+      ${
+        item.txHash
+          ? `<p style="font-size:11px;color:#5BAF85;margin:0 0 10px;">✦ NFT transferred to your wallet</p>`
+          : `<p style="font-size:11px;color:#9A8E7A;margin:0 0 10px;">Scan the NFC chip when your bag arrives to claim your NFT.</p>`
+      }
       <a href="https://michaelbychristian-app.vercel.app/piece/${item.tokenId}"
          style="display:inline-block;padding:10px 20px;background:#B8963E;color:#0C0B09;font-size:9px;font-weight:700;letter-spacing:0.3em;text-transform:uppercase;text-decoration:none;">
-        Claim Token #${item.tokenId} →
+        ${item.txHash ? `View Token #${item.tokenId} →` : `Claim Token #${item.tokenId} →`}
       </a>
     </div>
   `,
@@ -75,9 +144,19 @@ async function sendBuyerEmail({
   shippingAddress,
   billingAddress,
   sameAsBilling,
+  buyerWallet,
 }) {
   const isMulti = items.length > 1;
+  const allTransferred = items.every((i) => i.txHash);
+  const someTransferred = items.some((i) => i.txHash);
   const orderTitle = isMulti ? `${items.length} Pieces Secured` : items[0].name;
+
+  const walletSection = buyerWallet
+    ? `<div style="margin:24px 0;padding:16px;background:#1A1916;border:1px solid rgba(91,175,133,0.3);">
+        <p style="font-size:10px;color:#5BAF85;margin:0 0 6px;letter-spacing:0.2em;text-transform:uppercase;">Your Stellar Wallet</p>
+        <p style="font-family:monospace;font-size:11px;color:#D4AF6A;margin:0;word-break:break-all;">${buyerWallet}</p>
+       </div>`
+    : "";
 
   const shippingSection = shippingAddress
     ? `<div style="margin:24px 0;padding:20px;background:#1A1916;border:1px solid rgba(184,150,62,0.2);">
@@ -86,18 +165,9 @@ async function sendBuyerEmail({
        </div>`
     : "";
 
-  const billingSection =
-    billingAddress && !sameAsBilling
-      ? `<div style="margin:24px 0;padding:20px;background:#1A1916;border:1px solid rgba(184,150,62,0.2);">
-        <p style="font-size:10px;color:#B8963E;margin-bottom:8px;">BILLING ADDRESS</p>
-        <p style="font-size:13px;color:#F5EFE0;line-height:1.8;white-space:pre-line;">${billingAddress}</p>
-       </div>`
-      : "";
-
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#0C0B09;font-family:Helvetica,Arial,sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:40px 20px;">
-
   <div style="text-align:center;padding:32px 0;border-bottom:1px solid rgba(184,150,62,0.2);">
     <p style="font-size:10px;letter-spacing:0.4em;text-transform:uppercase;color:#B8963E;margin:0 0 8px;">Michael By Christian</p>
     <h1 style="font-family:Georgia,serif;font-size:32px;color:#F5EFE0;margin:0 0 6px;">Order Confirmed</h1>
@@ -107,43 +177,42 @@ async function sendBuyerEmail({
   <div style="padding:32px 0;">
     <p style="font-size:14px;color:#9A8E7A;line-height:1.8;">
       ${buyerName ? "Hi " + buyerName + "," : "Hi,"}<br><br>
-      Your payment has been confirmed. ${isMulti ? "Your bags are" : "Your bag is"} being prepared for shipment.
-      Once ${isMulti ? "they arrive" : "it arrives"}, scan the NFC chip or use the claim links below to receive your Authentication Contract${isMulti ? "s" : ""} (NFT${isMulti ? "s" : ""}).
+      ${
+        allTransferred
+          ? `Your payment has been confirmed and your NFT${isMulti ? "s have" : " has"} been transferred directly to your wallet. Your ${isMulti ? "bags are" : "bag is"} being prepared for shipment.`
+          : someTransferred
+            ? `Your payment has been confirmed. Some NFTs have been transferred to your wallet. ${isMulti ? "Bags are" : "Your bag is"} being prepared for shipment.`
+            : `Your payment has been confirmed. Your ${isMulti ? "bags are" : "bag is"} being prepared for shipment. Scan the NFC chip when ${isMulti ? "they arrive" : "it arrives"} to claim your NFT${isMulti ? "s" : ""}.`
+      }
     </p>
 
     <!-- Order summary -->
     <div style="border:1px solid rgba(184,150,62,0.2);margin:24px 0;overflow:hidden;">
       <div style="padding:12px 20px;background:#1A1916;border-bottom:1px solid rgba(184,150,62,0.2);">
-        <p style="font-size:9px;letter-spacing:0.3em;text-transform:uppercase;color:#B8963E;margin:0;">
-          Order Summary${isMulti ? ` · ${items.length} Pieces` : ""}
-        </p>
+        <p style="font-size:9px;letter-spacing:0.3em;text-transform:uppercase;color:#B8963E;margin:0;">Order Summary${isMulti ? ` · ${items.length} Pieces` : ""}</p>
       </div>
       ${buildItemRows(items)}
-      <div style="padding:12px 20px;background:#0C0B09;display:flex;justify-content:space-between;">
-        <span style="font-size:12px;color:#7A7060;">Total Paid</span>
+      <div style="padding:12px 20px;background:#0C0B09;">
+        <span style="font-size:12px;color:#7A7060;">Total Paid: </span>
         <span style="font-size:14px;color:#D4AF6A;font-weight:700;">$${(totalPaid / 100).toFixed(0)} USD</span>
       </div>
     </div>
 
+    ${walletSection}
     ${shippingSection}
-    ${billingSection}
 
-    <!-- Claim section -->
+    <!-- Action buttons per item -->
     <div style="margin:24px 0;">
       <p style="font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:#B8963E;margin-bottom:16px;">
-        Claim Your NFT${isMulti ? "s" : ""}
+        Your Authentication Contract${isMulti ? "s" : ""}
       </p>
-      <p style="font-size:12px;color:#9A8E7A;line-height:1.8;margin:0 0 16px;">
-        When your ${isMulti ? "bags arrive" : "bag arrives"}, scan the NFC chip or click below to claim each Authentication Contract:
-      </p>
-      ${buildClaimButtons(items)}
+      ${buildActionButtons(items, !!buyerWallet)}
     </div>
 
-    <p style="font-size:12px;color:#7A7060;text-align:center;margin-top:24px;">
+    <p style="font-size:12px;color:#7A7060;text-align:center;">
       Questions? <a href="mailto:youngcompltd@gmail.com" style="color:#B8963E;">youngcompltd@gmail.com</a>
     </p>
   </div>
-
   <div style="border-top:1px solid rgba(184,150,62,0.2);padding-top:20px;text-align:center;">
     <p style="font-family:Georgia,serif;font-size:13px;color:#7A7060;font-style:italic;">Michael By Christian</p>
   </div>
@@ -169,10 +238,9 @@ async function sendBuyerEmail({
   const result = await response.json();
   if (!response.ok) throw new Error("Resend error: " + JSON.stringify(result));
   console.log(`Buyer email sent to ${to}`);
-  return result;
 }
 
-// ── Owner sale notification email ─────────────────────────────
+// ── Owner notification email ──────────────────────────────────
 async function sendOwnerEmail({
   items,
   totalPaid,
@@ -180,51 +248,47 @@ async function sendOwnerEmail({
   buyerEmail,
   shippingAddress,
   billingAddress,
+  buyerWallet,
 }) {
   const isMulti = items.length > 1;
-
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#0C0B09;font-family:Helvetica,Arial,sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:40px 20px;">
-
   <div style="text-align:center;padding:32px 0;border-bottom:1px solid rgba(184,150,62,0.2);">
     <p style="font-size:10px;letter-spacing:0.4em;text-transform:uppercase;color:#B8963E;margin:0 0 8px;">MBC — New Sale</p>
-    <h1 style="font-family:Georgia,serif;font-size:32px;color:#F5EFE0;margin:0 0 8px;">
-      💰 ${isMulti ? `${items.length} Pieces Sold` : items[0].name}
-    </h1>
-    <h2 style="font-family:Georgia,serif;font-size:28px;color:#5BAF85;margin:0;">
-      $${(totalPaid / 100).toFixed(0)} USD
-    </h2>
+    <h1 style="font-family:Georgia,serif;font-size:32px;color:#F5EFE0;margin:0 0 8px;">💰 ${isMulti ? `${items.length} Pieces Sold` : items[0].name}</h1>
+    <h2 style="font-family:Georgia,serif;font-size:28px;color:#5BAF85;margin:0;">$${(totalPaid / 100).toFixed(0)} USD</h2>
   </div>
-
   <div style="padding:32px 0;">
-
-    <!-- Items sold -->
     <div style="border:1px solid rgba(184,150,62,0.2);margin:0 0 24px;overflow:hidden;">
       <div style="padding:12px 20px;background:#1A1916;border-bottom:1px solid rgba(184,150,62,0.2);">
-        <p style="font-size:9px;letter-spacing:0.3em;text-transform:uppercase;color:#B8963E;margin:0;">
-          Items Sold
-        </p>
+        <p style="font-size:9px;letter-spacing:0.3em;text-transform:uppercase;color:#B8963E;margin:0;">Items Sold</p>
       </div>
       ${buildItemRows(items)}
-      <div style="padding:12px 20px;background:#0C0B09;display:flex;justify-content:space-between;">
-        <span style="font-size:12px;color:#7A7060;">Total</span>
+      <div style="padding:12px 20px;background:#0C0B09;">
+        <span style="font-size:12px;color:#7A7060;">Total: </span>
         <span style="font-size:14px;color:#5BAF85;font-weight:700;">$${(totalPaid / 100).toFixed(0)} USD</span>
       </div>
     </div>
-
-    <!-- Buyer details -->
-    <div style="border:1px solid rgba(184,150,62,0.2);overflow:hidden;margin-bottom:24px;">
+    <div style="border:1px solid rgba(184,150,62,0.2);overflow:hidden;">
       <div style="padding:12px 20px;background:#1A1916;border-bottom:1px solid rgba(184,150,62,0.2);">
         <p style="font-size:9px;letter-spacing:0.3em;text-transform:uppercase;color:#B8963E;margin:0;">Buyer Details</p>
       </div>
       <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
-        <span style="font-size:12px;color:#7A7060;">Name: </span>
-        <span style="font-size:12px;color:#F5EFE0;">${buyerName || "—"}</span>
+        <span style="font-size:12px;color:#7A7060;">Name: </span><span style="font-size:12px;color:#F5EFE0;">${buyerName || "—"}</span>
       </div>
       <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
-        <span style="font-size:12px;color:#7A7060;">Email: </span>
-        <span style="font-size:12px;color:#F5EFE0;">${buyerEmail || "—"}</span>
+        <span style="font-size:12px;color:#7A7060;">Email: </span><span style="font-size:12px;color:#F5EFE0;">${buyerEmail || "—"}</span>
+      </div>
+      <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
+        <span style="font-size:12px;color:#7A7060;">Wallet: </span>
+        <span style="font-size:11px;color:${buyerWallet ? "#5BAF85" : "#7A7060"};font-family:monospace;">${buyerWallet || "Guest — no wallet yet"}</span>
+      </div>
+      <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
+        <span style="font-size:12px;color:#7A7060;">NFT Transfer: </span>
+        <span style="font-size:12px;color:${items.some((i) => i.txHash) ? "#5BAF85" : "#C0614A"};">
+          ${items.some((i) => i.txHash) ? "✦ Auto-transferred" : "Pending claim by buyer"}
+        </span>
       </div>
       <div style="padding:10px 20px;border-bottom:1px solid rgba(184,150,62,0.1);">
         <span style="font-size:12px;color:#7A7060;">Shipping: </span>
@@ -235,8 +299,7 @@ async function sendOwnerEmail({
         <span style="font-size:12px;color:#F5EFE0;white-space:pre-line;">${billingAddress || "Not provided yet"}</span>
       </div>
     </div>
-
-    <p style="font-size:12px;color:#7A7060;text-align:center;">
+    <p style="font-size:12px;color:#7A7060;text-align:center;margin-top:24px;">
       View in <a href="https://dashboard.stripe.com/test/payments" style="color:#B8963E;">Stripe Dashboard</a>
     </p>
   </div>
@@ -262,7 +325,7 @@ async function sendOwnerEmail({
   console.log("Owner notification sent");
 }
 
-// ── Main webhook handler ───────────────────────────────────────
+// ── Main handler ──────────────────────────────────────────────
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   if (req.method === "OPTIONS") return res.status(200).end();
@@ -290,9 +353,7 @@ module.exports = async (req, res) => {
   if (session.payment_status !== "paid")
     return res.status(200).json({ received: true });
 
-  console.log("FULL SESSION:", JSON.stringify(session, null, 2));
-
-  // Parse token IDs and names — support multi-item
+  // Parse token IDs and names
   const tokenIdsRaw = session.metadata?.token_ids || session.metadata?.token_id;
   const tokenIds = tokenIdsRaw
     ? String(tokenIdsRaw)
@@ -358,19 +419,29 @@ module.exports = async (req, res) => {
     ].filter(Boolean);
     if (lines.length > 1) billingAddress = lines.join("\n");
   }
-  if (shippingAddress && billingAddress && shippingAddress === billingAddress) {
+  if (shippingAddress && billingAddress && shippingAddress === billingAddress)
     shippingSameAsBilling = true;
+
+  // Check if buyer has MBC account with wallet
+  let buyerWallet = null;
+  if (buyerEmail) {
+    buyerWallet = await getBuyerWallet(buyerEmail);
+    console.log(
+      buyerWallet
+        ? `Buyer ${buyerEmail} has wallet ${buyerWallet} — will auto-transfer`
+        : `Buyer ${buyerEmail} is a guest — claim flow required`,
+    );
   }
 
-  // Fetch XLM price once for all items
+  // Fetch XLM price once
   let xlmPriceAtPurchase = null;
   try {
     xlmPriceAtPurchase = await fetchXLMPrice();
   } catch (e) {
-    console.log("XLM price fetch failed:", e.message);
+    console.log("XLM price failed:", e.message);
   }
 
-  // ── Mark ALL tokens sold in KV ──────────────────────────────
+  // ── Process each token ───────────────────────────────────────
   const soldItems = [];
   for (let idx = 0; idx < tokenIds.length; idx++) {
     const tid = tokenIds[idx];
@@ -378,6 +449,9 @@ module.exports = async (req, res) => {
     const xlmEquivalent = xlmPriceAtPurchase
       ? perItemAmount / 100 / xlmPriceAtPurchase
       : null;
+    let txHash = null;
+
+    // Mark sold in KV first
     try {
       await markTokenSold({
         tokenId: Number(tid),
@@ -390,15 +464,35 @@ module.exports = async (req, res) => {
         xlmEquivalent,
         xlmPriceBaseline: xlmPriceAtPurchase,
       });
-      soldItems.push({ tokenId: tid, name: itemName, amount: perItemAmount });
-      console.log(`Marked token ${tid} as sold`);
+      console.log(`Token ${tid} marked as sold`);
     } catch (kvErr) {
       console.error(`KV mark-sold failed for token ${tid}:`, kvErr.message);
-      soldItems.push({ tokenId: tid, name: itemName, amount: perItemAmount });
     }
+
+    // If buyer has wallet → transfer NFT immediately
+    if (buyerWallet) {
+      try {
+        txHash = await transferNFT(tid, buyerWallet);
+        await markTokenClaimed({ tokenId: Number(tid), buyerWallet });
+        console.log(`Token ${tid} auto-transferred to ${buyerWallet}`);
+      } catch (transferErr) {
+        console.error(
+          `Auto-transfer failed for token ${tid}:`,
+          transferErr.message,
+        );
+        // Don't block — item is marked sold, buyer can claim manually if transfer fails
+      }
+    }
+
+    soldItems.push({
+      tokenId: tid,
+      name: itemName,
+      amount: perItemAmount,
+      txHash,
+    });
   }
 
-  // ── Send buyer confirmation email ──────────────────────────
+  // ── Send emails ──────────────────────────────────────────────
   const sendTo = buyerEmail || "digwaldo@gmail.com";
   try {
     await sendBuyerEmail({
@@ -409,12 +503,12 @@ module.exports = async (req, res) => {
       shippingAddress,
       billingAddress,
       sameAsBilling: shippingSameAsBilling,
+      buyerWallet,
     });
   } catch (emailErr) {
     console.error("Buyer email failed:", emailErr.message);
   }
 
-  // ── Send owner sale notification ───────────────────────────
   try {
     await sendOwnerEmail({
       items: soldItems,
@@ -423,6 +517,7 @@ module.exports = async (req, res) => {
       buyerEmail,
       shippingAddress,
       billingAddress,
+      buyerWallet,
     });
   } catch (ownerErr) {
     console.error("Owner email failed:", ownerErr.message);
