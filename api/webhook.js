@@ -41,6 +41,7 @@ async function sendConfirmationEmail({
   shippingAddress,
   billingAddress,
   sameAsBilling,
+  subject,
 }) {
   const shippingSection = shippingAddress
     ? `<div style="margin:24px 0;padding:20px;background:#1A1916;border:1px solid rgba(184,150,62,0.2);">
@@ -116,11 +117,8 @@ async function sendConfirmationEmail({
     },
     body: JSON.stringify({
       from: "MBC Michael By Christian <onboarding@resend.dev>",
-      to: "digwaldo@gmail.com", // hardcoded for now since buyer email can be unreliable
-      subject:
-        tokenIds.length > 1
-          ? `Order Confirmed — ${tokenIds.length} Pieces · MBC`
-          : `Order Confirmed — ${pieceName} · MBC`,
+      to: [to],
+      subject: subject || `Order Confirmed — ${pieceName} · MBC`,
       html,
     }),
   });
@@ -270,7 +268,7 @@ module.exports = async (req, res) => {
   const sendTo = buyerEmail || "digwaldo@gmail.com";
   try {
     await sendConfirmationEmail({
-      to: ["digwaldo@gmail.com"], // hardcoded for now since buyer email can be unreliable
+      to: "digwaldo@gmail.com", //hardcoded to avoid spamming real buyers during testing — replace with `to: sendTo` for production
       buyerName,
       pieceName,
       tokenId,
@@ -278,6 +276,10 @@ module.exports = async (req, res) => {
       shippingAddress,
       billingAddress,
       sameAsBilling: shippingSameAsBilling,
+      subject:
+        tokenIds.length > 1
+          ? `Order Confirmed — ${tokenIds.length} Pieces · MBC`
+          : `Order Confirmed — ${pieceName} · MBC`,
     });
     console.log(`Confirmation email sent to ${sendTo}`);
   } catch (emailErr) {
