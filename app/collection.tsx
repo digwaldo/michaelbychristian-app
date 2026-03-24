@@ -17,6 +17,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { CartIcon } from "../components/CartIcon";
 import { useAuth } from "../context/AuthContext";
 import { BACKEND, C, CONTRACT, PASSPHRASE, RPC_URL } from "../lib/theme";
 
@@ -300,7 +301,7 @@ function addRarity(items: NFTItem[]): NFTItem[] {
 
 export default function CollectionScreen() {
   const { isPhone, isWeb } = useClientLayout();
-  const { session, addToCart, isInCart, profile } = useAuth();
+  const { session, addToCart, removeFromCart, isInCart, profile } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [all, setAll] = useState<NFTItem[]>([]);
@@ -661,30 +662,19 @@ export default function CollectionScreen() {
           </Text>
         </View>
 
-        {/* ── Card footer — hide price when sold ── */}
+        {/* ── Card footer ── */}
         <View style={s.cardFoot}>
           <View style={s.cardPriceBox}>
-            {!item.sold ? (
+            {item.sold ? null : inCart ? (
+              <Text style={s.inCartLabel}>✦ In Cart</Text>
+            ) : (
               <>
                 <Text style={s.cardPrice}>{formatPrice(item.price_usdc)}</Text>
                 <Text style={s.cardCurrency}>USD</Text>
               </>
-            ) : null}
+            )}
           </View>
-          {!item.sold ? (
-            <TouchableOpacity
-              style={s.buyBtn}
-              onPress={() =>
-                router.push({
-                  pathname: "/piece/[id]",
-                  params: { id: item.tokenId },
-                })
-              }
-              activeOpacity={0.8}
-            >
-              <Text style={s.buyBtnTxt}>Buy Now</Text>
-            </TouchableOpacity>
-          ) : (
+          {item.sold ? (
             <TouchableOpacity
               style={s.offerBtn}
               onPress={() =>
@@ -695,8 +685,47 @@ export default function CollectionScreen() {
               }
               activeOpacity={0.8}
             >
-              <Text style={s.offerBtnTxt}>Make Offer</Text>
+              <Text style={s.offerBtnTxt}>Offer</Text>
             </TouchableOpacity>
+          ) : inCart ? (
+            <TouchableOpacity
+              style={s.removeCartBtn}
+              onPress={() => removeFromCart(item.tokenId)}
+              activeOpacity={0.8}
+            >
+              <Text style={s.removeCartBtnTxt}>✕ Remove</Text>
+            </TouchableOpacity>
+          ) : (
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+            >
+              <TouchableOpacity
+                style={s.cartBtn}
+                onPress={() =>
+                  addToCart({
+                    token_id: item.tokenId,
+                    bag_name: item.name,
+                    price_usdc: item.price_usdc,
+                    image: item.image,
+                  })
+                }
+                activeOpacity={0.8}
+              >
+                <Text style={s.cartBtnTxt}>+</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={s.buyBtn}
+                onPress={() =>
+                  router.push({
+                    pathname: "/piece/[id]",
+                    params: { id: item.tokenId },
+                  })
+                }
+                activeOpacity={0.8}
+              >
+                <Text style={s.buyBtnTxt}>Buy</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       </TouchableOpacity>
@@ -744,14 +773,98 @@ export default function CollectionScreen() {
                 The <Text style={s.navTitleEm}>Collection</Text>
               </Text>
             </View>
-            <TouchableOpacity
-              onPress={() => router.back()}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={s.navBack}>← Home</Text>
-            </TouchableOpacity>
+
+            {/* Mobile: CartIcon + hamburger */}
+            {isPhone ? (
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 14 }}
+              >
+                <CartIcon />
+                <TouchableOpacity
+                  onPress={() => setMobileMenuOpen(!mobileMenuOpen)}
+                  style={s.hamburger}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <View style={[s.hLine, mobileMenuOpen && s.hLineTop]} />
+                  <View style={[s.hLine, mobileMenuOpen && s.hLineMid]} />
+                  <View style={[s.hLine, mobileMenuOpen && s.hLineBot]} />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              /* Desktop: full nav links */
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 16 }}
+              >
+                <TouchableOpacity
+                  onPress={() => router.push("/rarity" as any)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={s.navRarity}>✦ Rarity</Text>
+                </TouchableOpacity>
+                <CartIcon />
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push(session ? "/profile" : ("/auth" as any))
+                  }
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={s.navRarity}>{session ? "👤" : "Sign In"}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => router.back()}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={s.navBack}>← Home</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
+
+        {/* Mobile dropdown menu */}
+        {isPhone && mobileMenuOpen && (
+          <View style={s.mobileMenu}>
+            {[
+              {
+                label: "← Home",
+                onPress: () => {
+                  setMobileMenuOpen(false);
+                  router.back();
+                },
+              },
+              {
+                label: "✦ Rarity",
+                onPress: () => {
+                  setMobileMenuOpen(false);
+                  router.push("/rarity" as any);
+                },
+                gold: true,
+              },
+              {
+                label: session ? "👤 My Pieces" : "Sign In",
+                onPress: () => {
+                  setMobileMenuOpen(false);
+                  router.push(session ? "/profile" : ("/auth" as any));
+                },
+              },
+            ].map((item) => (
+              <TouchableOpacity
+                key={item.label}
+                style={s.mobileMenuItem}
+                onPress={item.onPress}
+              >
+                <Text
+                  style={[
+                    s.mobileMenuTxt,
+                    (item as any).gold && { color: C.gold },
+                  ]}
+                >
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         {!loading && !error && (
           <View style={s.statsBar}>
@@ -1377,9 +1490,28 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  cartBtnActive: { backgroundColor: C.gold, borderColor: C.gold },
   cartBtnTxt: { fontSize: 14, color: C.muted, lineHeight: 18 },
-  cartBtnTxtActive: { color: C.black, fontWeight: "700" },
+  inCartLabel: {
+    fontSize: 8,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: C.gold,
+    fontWeight: "600",
+  },
+  removeCartBtn: {
+    backgroundColor: "rgba(192,97,74,0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(192,97,74,0.5)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  removeCartBtnTxt: {
+    fontSize: 7,
+    fontWeight: "700",
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: C.red,
+  },
   buyBtn: {
     backgroundColor: C.black,
     paddingHorizontal: 10,
