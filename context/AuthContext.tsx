@@ -193,7 +193,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function signInWithGoogle() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: "michaelbychristian://auth/callback" },
+      options: {
+        redirectTo:
+          Platform.OS === "web"
+            ? `${window.location.origin}/auth/callback`
+            : "michaelbychristian://auth/callback",
+      },
     });
     return { error };
   }

@@ -15,6 +15,7 @@ export default function RootLayout() {
         <Stack.Screen name="profile" />
         <Stack.Screen name="rarity" />
         <Stack.Screen name="success" />
+        <Stack.Screen name="auth/callback" />
       </Stack>
     </AuthProvider>
   );
