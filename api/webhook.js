@@ -68,29 +68,76 @@ async function transferNFT(tokenId, buyerWallet) {
     "Test SDF Network ; September 2015";
   const ADMIN_SECRET = process.env.STELLAR_ADMIN_SECRET;
 
-  const { basicNodeSigner } = require("@stellar/stellar-sdk/contract");
   const adminKeypair = StellarSdk.Keypair.fromSecret(ADMIN_SECRET);
   const adminPublic = adminKeypair.publicKey();
-  const { signTransaction } = basicNodeSigner(adminKeypair, STELLAR_PASSPHRASE);
-  const { Client } = await import("../contract-client/dist/index.js");
 
-  const client = new Client({
-    contractId: STELLAR_CONTRACT,
+  const server = new StellarSdk.rpc.Server(STELLAR_RPC);
+  const contract = new StellarSdk.Contract(STELLAR_CONTRACT);
+
+  // Load admin account with current sequence
+  const accountData = await server.getAccount(adminPublic);
+  const account = new StellarSdk.Account(
+    adminPublic,
+    String(accountData.sequence),
+  );
+
+  // Use Address() for proper Soroban address encoding
+  const fromVal = new StellarSdk.Address(adminPublic).toScVal();
+  const toVal = new StellarSdk.Address(buyerWallet).toScVal();
+  const tokenIdVal = StellarSdk.nativeToScVal(Number(tokenId), { type: "u64" });
+
+  const tx = new StellarSdk.TransactionBuilder(account, {
+    fee: "1000000",
     networkPassphrase: STELLAR_PASSPHRASE,
-    rpcUrl: STELLAR_RPC,
-    publicKey: adminPublic,
-    signTransaction,
-  });
+  })
+    .addOperation(contract.call("transfer", fromVal, toVal, tokenIdVal))
+    .setTimeout(60)
+    .build();
 
-  const tx = await client.transfer({
-    from: adminPublic,
-    to: buyerWallet,
-    token_id: BigInt(tokenId),
-  });
+  // Simulate to get sorobanData + auth entries
+  const sim = await server.simulateTransaction(tx);
+  if (!StellarSdk.rpc.Api.isSimulationSuccess(sim)) {
+    const errStr = JSON.stringify(sim, (_, v) =>
+      typeof v === "bigint" ? v.toString() : v,
+    ).slice(0, 500);
+    throw new Error(`Transfer simulation failed: ${errStr}`);
+  }
 
-  const result = await tx.signAndSend();
-  console.log(`Token ${tokenId} transferred to ${buyerWallet}: ${result.hash}`);
-  return result.hash;
+  // Assemble + sign
+  const preparedTx = StellarSdk.rpc.assembleTransaction(tx, sim).build();
+  preparedTx.sign(adminKeypair);
+
+  // Submit
+  const sendResult = await server.sendTransaction(preparedTx);
+  if (sendResult.status === "ERROR") {
+    const errStr = JSON.stringify(sendResult, (_, v) =>
+      typeof v === "bigint" ? v.toString() : v,
+    ).slice(0, 500);
+    throw new Error(`Transfer submission failed: ${errStr}`);
+  }
+
+  // Poll for confirmation
+  let txResult = { status: "PENDING" };
+  let attempts = 0;
+  while (txResult.status === "PENDING" || txResult.status === "NOT_FOUND") {
+    if (attempts++ > 30) throw new Error("Transaction confirmation timed out");
+    await new Promise((r) => setTimeout(r, 1500));
+    try {
+      txResult = await server.getTransaction(sendResult.hash);
+    } catch (e) {}
+  }
+
+  if (txResult.status !== "SUCCESS") {
+    const errStr = JSON.stringify(txResult, (_, v) =>
+      typeof v === "bigint" ? v.toString() : v,
+    ).slice(0, 500);
+    throw new Error(`Transfer not successful: ${txResult.status} — ${errStr}`);
+  }
+
+  console.log(
+    `✓ Token ${tokenId} transferred to ${buyerWallet}: ${sendResult.hash}`,
+  );
+  return sendResult.hash;
 }
 
 // ── Build item rows for emails ────────────────────────────────

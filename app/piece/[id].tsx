@@ -194,6 +194,16 @@ export default function PieceScreen() {
     load();
   }, [tokenId]);
 
+  // Auto-fill email + wallet if logged in
+  useEffect(() => {
+    if (session?.user?.email && !claimEmail) {
+      setClaimEmail(session.user.email);
+    }
+    if (profile?.stellar_wallet_public && !claimWallet) {
+      setClaimWallet(profile.stellar_wallet_public);
+    }
+  }, [session, profile]);
+
   async function load() {
     setPageState("loading");
     setError(null);
@@ -735,26 +745,45 @@ export default function PieceScreen() {
                 </View>
               ) : (
                 <>
-                  <TextInput
-                    style={s.claimInput}
-                    placeholder="Your email address"
-                    placeholderTextColor={C.muted}
-                    value={claimEmail}
-                    onChangeText={setClaimEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
-                  <TextInput
-                    style={s.claimInput}
-                    placeholder="Stellar wallet address (optional — we'll create one for you)"
-                    placeholderTextColor={C.muted}
-                    value={claimWallet}
-                    onChangeText={setClaimWallet}
-                    autoCapitalize="none"
-                  />
+                  {/* If logged in, show read-only email + wallet — no need to type */}
+                  {session?.user?.email ? (
+                    <View style={s.claimAutoFill}>
+                      <Text style={s.claimAutoFillLabel}>Claiming as</Text>
+                      <Text style={s.claimAutoFillVal}>
+                        {session.user.email}
+                      </Text>
+                      {profile?.stellar_wallet_public && (
+                        <Text style={s.claimAutoFillWallet} numberOfLines={1}>
+                          {profile.stellar_wallet_public.slice(0, 12)}...
+                          {profile.stellar_wallet_public.slice(-6)}
+                        </Text>
+                      )}
+                    </View>
+                  ) : (
+                    <>
+                      <TextInput
+                        style={s.claimInput}
+                        placeholder="Your email address"
+                        placeholderTextColor={C.muted}
+                        value={claimEmail}
+                        onChangeText={setClaimEmail}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                      />
+                      <TextInput
+                        style={s.claimInput}
+                        placeholder="Stellar wallet address (optional — we'll create one for you)"
+                        placeholderTextColor={C.muted}
+                        value={claimWallet}
+                        onChangeText={setClaimWallet}
+                        autoCapitalize="none"
+                      />
+                    </>
+                  )}
                   {claimError ? (
                     <Text style={s.claimError}>{claimError}</Text>
                   ) : null}
+                  {/* closes the guest input block */}
                   <TouchableOpacity
                     style={[
                       s.claimBtn,
@@ -1484,6 +1513,26 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 10,
+  },
+  claimAutoFill: {
+    backgroundColor: C.warm,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 14,
+    marginBottom: 12,
+  },
+  claimAutoFillLabel: {
+    fontSize: 8,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.gold,
+    marginBottom: 4,
+  },
+  claimAutoFillVal: { fontSize: 13, color: C.cream, marginBottom: 4 },
+  claimAutoFillWallet: {
+    fontSize: 10,
+    color: C.muted,
+    fontFamily: "monospace",
   },
   claimBtn: {
     backgroundColor: C.gold,

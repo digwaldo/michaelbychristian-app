@@ -62,7 +62,7 @@ async function getTokenOwner(tokenId) {
   }
 }
 
-// Transfer NFT using raw Stellar SDK — no contract-client needed
+// Transfer NFT using raw Stellar SDK with proper auth signing
 async function transferNFT(tokenId, buyerAddress) {
   const adminKeypair = StellarSdk.Keypair.fromSecret(ADMIN_SECRET);
   const adminPublic = adminKeypair.publicKey();
@@ -70,61 +70,81 @@ async function transferNFT(tokenId, buyerAddress) {
   const server = new StellarSdk.rpc.Server(STELLAR_RPC);
   const contract = new StellarSdk.Contract(STELLAR_CONTRACT);
 
-  // Load admin account
+  // Load admin account with current sequence
   const accountData = await server.getAccount(adminPublic);
-  const account = new StellarSdk.Account(adminPublic, accountData.sequence);
+  const account = new StellarSdk.Account(
+    adminPublic,
+    String(accountData.sequence),
+  );
 
-  // Build transfer transaction
+  // Build the transfer operation with proper ScVal encoding for Soroban addresses
+  const fromVal = new StellarSdk.Address(adminPublic).toScVal();
+  const toVal = new StellarSdk.Address(buyerAddress).toScVal();
+  const tokenIdVal = StellarSdk.nativeToScVal(Number(tokenId), { type: "u64" });
+
   const tx = new StellarSdk.TransactionBuilder(account, {
-    fee: StellarSdk.BASE_FEE,
+    fee: "1000000", // higher fee for contract calls
     networkPassphrase: STELLAR_PASSPHRASE,
   })
-    .addOperation(
-      contract.call(
-        "transfer",
-        StellarSdk.nativeToScVal(adminPublic, { type: "address" }),
-        StellarSdk.nativeToScVal(buyerAddress, { type: "address" }),
-        StellarSdk.nativeToScVal(Number(tokenId), { type: "u64" }),
-      ),
-    )
-    .setTimeout(30)
+    .addOperation(contract.call("transfer", fromVal, toVal, tokenIdVal))
+    .setTimeout(60)
     .build();
 
-  // Simulate to get auth + footprint
+  // Simulate — this returns the sorobanData + auth entries
   const sim = await server.simulateTransaction(tx);
   if (!StellarSdk.rpc.Api.isSimulationSuccess(sim)) {
-    throw new Error(
-      `Transfer simulation failed: ${JSON.stringify(sim).slice(0, 200)}`,
-    );
+    const errStr = JSON.stringify(sim, (_, v) =>
+      typeof v === "bigint" ? v.toString() : v,
+    ).slice(0, 500);
+    throw new Error(`Transfer simulation failed: ${errStr}`);
   }
 
-  // Assemble and sign
-  const assembled = StellarSdk.rpc.assembleTransaction(tx, sim).build();
-  assembled.sign(adminKeypair);
+  console.log(`Simulation success for token ${tokenId}, assembling...`);
+
+  // assembleTransaction adds sorobanData + auth to the tx
+  const preparedTx = StellarSdk.rpc.assembleTransaction(tx, sim).build();
+
+  // Sign the transaction with admin keypair
+  preparedTx.sign(adminKeypair);
 
   // Submit
-  const result = await server.sendTransaction(assembled);
-  if (result.status === "ERROR") {
-    throw new Error(`Transfer failed: ${JSON.stringify(result).slice(0, 200)}`);
+  const sendResult = await server.sendTransaction(preparedTx);
+  console.log(`Send status: ${sendResult.status}, hash: ${sendResult.hash}`);
+
+  if (sendResult.status === "ERROR") {
+    const errStr = JSON.stringify(sendResult, (_, v) =>
+      typeof v === "bigint" ? v.toString() : v,
+    ).slice(0, 500);
+    throw new Error(`Transfer submission failed: ${errStr}`);
   }
 
-  // Wait for confirmation
-  let txResult = result;
+  // Poll for confirmation
+  let txResult = { status: "PENDING" };
   let attempts = 0;
   while (txResult.status === "PENDING" || txResult.status === "NOT_FOUND") {
-    if (attempts++ > 20) throw new Error("Transaction timed out");
+    if (attempts++ > 30)
+      throw new Error("Transaction confirmation timed out after 45s");
     await new Promise((r) => setTimeout(r, 1500));
-    txResult = await server.getTransaction(result.hash);
+    try {
+      txResult = await server.getTransaction(sendResult.hash);
+    } catch (e) {
+      console.log(`Poll attempt ${attempts}: ${e.message}`);
+    }
   }
 
   if (txResult.status !== "SUCCESS") {
-    throw new Error(`Transfer not successful: ${txResult.status}`);
+    const errStr = JSON.stringify(txResult, (_, v) =>
+      typeof v === "bigint" ? v.toString() : v,
+    ).slice(0, 500);
+    throw new Error(
+      `Transfer failed with status ${txResult.status}: ${errStr}`,
+    );
   }
 
   console.log(
-    `Token ${tokenId} transferred to ${buyerAddress}: ${result.hash}`,
+    `✓ Token ${tokenId} successfully transferred to ${buyerAddress}: ${sendResult.hash}`,
   );
-  return { hash: result.hash };
+  return { hash: sendResult.hash };
 }
 
 module.exports = async (req, res) => {
