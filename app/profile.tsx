@@ -54,6 +54,7 @@ interface OwnedPiece {
   primary_texture?: string;
   primary_color?: string;
   nfc_chip_id?: string;
+  owner?: string | null;
   rarity_rank?: number;
   rarity_label?: string;
 }
@@ -67,6 +68,7 @@ async function loadTokenImage(
   primary_texture: string;
   primary_color: string;
   nfc_chip_id: string;
+  owner: string | null;
 }> {
   try {
     const Sdk = await import("@stellar/stellar-sdk" as any);
@@ -74,29 +76,26 @@ async function loadTokenImage(
     const contract = new Sdk.Contract(CONTRACT);
     const keypair = Sdk.Keypair.random();
     const account = new Sdk.Account(keypair.publicKey(), "0");
-    const tx = new Sdk.TransactionBuilder(account, {
-      fee: Sdk.BASE_FEE,
-      networkPassphrase: PASSPHRASE,
-    })
-      .addOperation(
-        contract.call(
-          "full_token_data",
-          Sdk.nativeToScVal(tokenId, { type: "u64" }),
-        ),
-      )
-      .setTimeout(30)
-      .build();
-    const sim = await server.simulateTransaction(tx);
-    if (!Sdk.rpc.Api.isSimulationSuccess(sim))
-      return {
-        image: null,
-        silhouette: "",
-        edition_type: "",
-        primary_texture: "",
-        primary_color: "",
-        nfc_chip_id: "",
-      };
-    const raw = Sdk.scValToNative(sim.result.retval);
+
+    async function sim(fn: string, args: any[] = []) {
+      const tx = new Sdk.TransactionBuilder(account, {
+        fee: Sdk.BASE_FEE,
+        networkPassphrase: PASSPHRASE,
+      })
+        .addOperation(contract.call(fn, ...args))
+        .setTimeout(30)
+        .build();
+      const result = await server.simulateTransaction(tx);
+      if (!Sdk.rpc.Api.isSimulationSuccess(result)) return null;
+      return Sdk.scValToNative(result.result.retval);
+    }
+
+    const tokenArg = Sdk.nativeToScVal(tokenId, { type: "u64" });
+    const [raw, ownerRaw] = await Promise.all([
+      sim("full_token_data", [tokenArg]),
+      sim("owner_of", [tokenArg]).catch(() => null),
+    ]);
+
     const t = raw?.traits || {};
     return {
       image: resolveImg(raw?.image),
@@ -105,6 +104,7 @@ async function loadTokenImage(
       primary_texture: t.primary_texture || raw?.primary_texture || "",
       primary_color: t.primary_color || raw?.primary_color || "",
       nfc_chip_id: t.nfc_chip_id || raw?.nfc_chip_id || "",
+      owner: ownerRaw ? String(ownerRaw).trim() : null,
     };
   } catch {
     return {
@@ -114,6 +114,7 @@ async function loadTokenImage(
       primary_texture: "",
       primary_color: "",
       nfc_chip_id: "",
+      owner: null,
     };
   }
 }
@@ -152,12 +153,15 @@ export default function ProfileScreen() {
               .catch(() => null),
           ]);
           if (myRes?.isOwner) {
+            // Also check on-chain: if owner !== admin wallet, it's claimed
+            // even if KV hasn't been updated yet
+            const onChainClaimed = false; // resolved lazily when image loads
             owned.push({
               tokenId,
               name: myRes.bagName || `Token #${tokenId}`,
-              image: null, // loaded lazily below
+              image: null,
               soldAt: checkRes?.soldAt || myRes.soldAt,
-              claimed: checkRes?.claimed || myRes.claimed,
+              claimed: checkRes?.claimed || myRes.claimed || false,
               buyerWallet: checkRes?.buyerWallet || null,
               amount: myRes.amount,
               rarity_rank: rarityRes?.found ? rarityRes.rank : undefined,
@@ -172,12 +176,25 @@ export default function ProfileScreen() {
       );
       setPieces(sorted);
 
-      // Load images + traits from Stellar in background
+      // Load images + traits + on-chain owner from Stellar in background
       for (const piece of sorted) {
         loadTokenImage(piece.tokenId).then((traits) => {
+          // If on-chain owner is not admin → NFT is claimed
+          const ADMIN =
+            "GB2GKZ22XFF5BZWRV6AIO7JLCDT7W36Y5DFIUWPENA5IIDEAH7FLXOA3";
+          const onChainClaimed =
+            !!traits.owner &&
+            traits.owner.toUpperCase() !== ADMIN.toUpperCase();
           setPieces((prev) =>
             prev.map((p) =>
-              p.tokenId === piece.tokenId ? { ...p, ...traits } : p,
+              p.tokenId === piece.tokenId
+                ? {
+                    ...p,
+                    ...traits,
+                    claimed: p.claimed || onChainClaimed,
+                    buyerWallet: onChainClaimed ? traits.owner : p.buyerWallet,
+                  }
+                : p,
             ),
           );
         });

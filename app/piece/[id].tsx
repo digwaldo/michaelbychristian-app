@@ -216,12 +216,28 @@ export default function PieceScreen() {
       setData(tokenData);
       setSaleData(soldRes);
 
-      if (soldRes.sold && soldRes.claimed) {
-        setPageState("sold_claimed");
-      } else if (soldRes.sold && !soldRes.claimed) {
-        setPageState("sold_unclaimed");
-      } else {
+      if (!soldRes.sold) {
         setPageState("listed");
+      } else {
+        // Cross-reference on-chain owner with KV claimed state.
+        // If owner is not the admin wallet the NFT has already been transferred.
+        const onChainClaimed =
+          !!tokenData.owner &&
+          tokenData.owner.toUpperCase() !== ADMIN_WALLET.toUpperCase();
+
+        if (soldRes.claimed || onChainClaimed) {
+          // Sync KV if it still shows unclaimed but chain shows transferred
+          if (!soldRes.claimed && onChainClaimed) {
+            setSaleData((prev: any) => ({
+              ...prev,
+              claimed: true,
+              buyerWallet: tokenData.owner,
+            }));
+          }
+          setPageState("sold_claimed");
+        } else {
+          setPageState("sold_unclaimed");
+        }
       }
 
       Animated.timing(fadeIn, {

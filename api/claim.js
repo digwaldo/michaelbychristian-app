@@ -1,6 +1,6 @@
 // api/claim.js
 // POST /api/claim
-// Verifies buyer email matches sale record, then transfers NFT to their wallet
+// Verifies buyer email, transfers NFT using raw Stellar SDK (no contract-client)
 
 const { getTokenSaleData, markTokenClaimed } = require("./sold");
 const StellarSdk = require("@stellar/stellar-sdk");
@@ -13,6 +13,9 @@ const STELLAR_RPC =
 const STELLAR_PASSPHRASE =
   process.env.STELLAR_NETWORK_PASSPHRASE || "Test SDF Network ; September 2015";
 const ADMIN_SECRET = process.env.STELLAR_ADMIN_SECRET;
+const ADMIN_WALLET =
+  process.env.STELLAR_ADMIN_WALLET ||
+  "GB2GKZ22XFF5BZWRV6AIO7JLCDT7W36Y5DFIUWPENA5IIDEAH7FLXOA3";
 
 function setCORS(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -31,28 +34,93 @@ async function fundTestnetAccount(publicKey) {
   return res.json();
 }
 
+// Check current owner on Stellar
+async function getTokenOwner(tokenId) {
+  try {
+    const server = new StellarSdk.rpc.Server(STELLAR_RPC);
+    const contract = new StellarSdk.Contract(STELLAR_CONTRACT);
+    const keypair = StellarSdk.Keypair.random();
+    const account = new StellarSdk.Account(keypair.publicKey(), "0");
+    const tx = new StellarSdk.TransactionBuilder(account, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase: STELLAR_PASSPHRASE,
+    })
+      .addOperation(
+        contract.call(
+          "owner_of",
+          StellarSdk.nativeToScVal(Number(tokenId), { type: "u64" }),
+        ),
+      )
+      .setTimeout(30)
+      .build();
+    const sim = await server.simulateTransaction(tx);
+    if (!StellarSdk.rpc.Api.isSimulationSuccess(sim)) return null;
+    return String(StellarSdk.scValToNative(sim.result.retval)).trim();
+  } catch (e) {
+    console.log("getTokenOwner error:", e.message);
+    return null;
+  }
+}
+
+// Transfer NFT using raw Stellar SDK — no contract-client needed
 async function transferNFT(tokenId, buyerAddress) {
-  const { basicNodeSigner } = require("@stellar/stellar-sdk/contract");
   const adminKeypair = StellarSdk.Keypair.fromSecret(ADMIN_SECRET);
   const adminPublic = adminKeypair.publicKey();
-  const { signTransaction } = basicNodeSigner(adminKeypair, STELLAR_PASSPHRASE);
-  const { Client } = await import("../contract-client/dist/index.js");
 
-  const client = new Client({
-    contractId: STELLAR_CONTRACT,
+  const server = new StellarSdk.rpc.Server(STELLAR_RPC);
+  const contract = new StellarSdk.Contract(STELLAR_CONTRACT);
+
+  // Load admin account
+  const accountData = await server.getAccount(adminPublic);
+  const account = new StellarSdk.Account(adminPublic, accountData.sequence);
+
+  // Build transfer transaction
+  const tx = new StellarSdk.TransactionBuilder(account, {
+    fee: StellarSdk.BASE_FEE,
     networkPassphrase: STELLAR_PASSPHRASE,
-    rpcUrl: STELLAR_RPC,
-    publicKey: adminPublic,
-    signTransaction,
-  });
+  })
+    .addOperation(
+      contract.call(
+        "transfer",
+        StellarSdk.nativeToScVal(adminPublic, { type: "address" }),
+        StellarSdk.nativeToScVal(buyerAddress, { type: "address" }),
+        StellarSdk.nativeToScVal(Number(tokenId), { type: "u64" }),
+      ),
+    )
+    .setTimeout(30)
+    .build();
 
-  const tx = await client.transfer({
-    from: adminPublic,
-    to: buyerAddress,
-    token_id: BigInt(tokenId),
-  });
+  // Simulate to get auth + footprint
+  const sim = await server.simulateTransaction(tx);
+  if (!StellarSdk.rpc.Api.isSimulationSuccess(sim)) {
+    throw new Error(
+      `Transfer simulation failed: ${JSON.stringify(sim).slice(0, 200)}`,
+    );
+  }
 
-  const result = await tx.signAndSend();
+  // Assemble and sign
+  const assembled = StellarSdk.rpc.assembleTransaction(tx, sim).build();
+  assembled.sign(adminKeypair);
+
+  // Submit
+  const result = await server.sendTransaction(assembled);
+  if (result.status === "ERROR") {
+    throw new Error(`Transfer failed: ${JSON.stringify(result).slice(0, 200)}`);
+  }
+
+  // Wait for confirmation
+  let txResult = result;
+  let attempts = 0;
+  while (txResult.status === "PENDING" || txResult.status === "NOT_FOUND") {
+    if (attempts++ > 20) throw new Error("Transaction timed out");
+    await new Promise((r) => setTimeout(r, 1500));
+    txResult = await server.getTransaction(result.hash);
+  }
+
+  if (txResult.status !== "SUCCESS") {
+    throw new Error(`Transfer not successful: ${txResult.status}`);
+  }
+
   console.log(
     `Token ${tokenId} transferred to ${buyerAddress}: ${result.hash}`,
   );
@@ -70,6 +138,7 @@ module.exports = async (req, res) => {
     return res.status(400).json({ error: "tokenId and buyerEmail required" });
 
   try {
+    // 1. Verify this buyer purchased this token
     const saleData = await getTokenSaleData(Number(tokenId));
     if (!saleData)
       return res
@@ -81,14 +150,34 @@ module.exports = async (req, res) => {
         .status(403)
         .json({ error: "Email does not match purchase record" });
 
-    if (saleData.claimed)
-      return res
-        .status(400)
-        .json({
-          error: "This token has already been claimed",
-          buyerWallet: saleData.buyerWallet,
-        });
+    // 2. Check if already claimed in KV
+    if (saleData.claimed) {
+      return res.status(400).json({
+        error: "This token has already been claimed",
+        buyerWallet: saleData.buyerWallet,
+      });
+    }
 
+    // 3. Also check on-chain — if owner is not admin, it's already transferred
+    const currentOwner = await getTokenOwner(tokenId);
+    if (
+      currentOwner &&
+      currentOwner.toUpperCase() !== ADMIN_WALLET.toUpperCase()
+    ) {
+      // Already transferred on-chain — just update KV to reflect this
+      await markTokenClaimed({
+        tokenId: Number(tokenId),
+        buyerWallet: currentOwner,
+      });
+      return res.status(200).json({
+        success: true,
+        alreadyTransferred: true,
+        buyerWallet: currentOwner,
+        message: "NFT was already transferred to this wallet",
+      });
+    }
+
+    // 4. Resolve wallet — use provided or create custodial
     let wallet = walletAddress?.trim();
     let custodialSecret = null;
     let isCustodial = false;
@@ -106,9 +195,13 @@ module.exports = async (req, res) => {
       }
     }
 
+    // 5. Transfer NFT
     const transfer = await transferNFT(tokenId, wallet);
+
+    // 6. Mark as claimed in KV
     await markTokenClaimed({ tokenId: Number(tokenId), buyerWallet: wallet });
 
+    // 7. Send wallet credentials email if custodial
     if (isCustodial && process.env.RESEND_API_KEY) {
       await fetch("https://api.resend.com/emails", {
         method: "POST",
@@ -143,15 +236,13 @@ module.exports = async (req, res) => {
       });
     }
 
-    return res
-      .status(200)
-      .json({
-        success: true,
-        txHash: transfer.hash,
-        buyerWallet: wallet,
-        isCustodial,
-        custodialSecret: isCustodial ? custodialSecret : null,
-      });
+    return res.status(200).json({
+      success: true,
+      txHash: transfer.hash,
+      buyerWallet: wallet,
+      isCustodial,
+      custodialSecret: isCustodial ? custodialSecret : null,
+    });
   } catch (err) {
     console.error("Claim error:", err.message);
     return res.status(500).json({ error: err.message });
