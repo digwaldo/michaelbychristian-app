@@ -448,7 +448,7 @@ export default function HomeScreen() {
                     <Text style={[s.btnWhiteTxt, isPhone && { fontSize: 9 }]}>
                       Browse & Buy
                     </Text>
-                  </TouchableOpacity>*/}
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={[
                       s.btnGhost,
@@ -460,7 +460,7 @@ export default function HomeScreen() {
                     <Text style={[s.btnGhostTxt, isPhone && { fontSize: 9 }]}>
                       My Pieces
                     </Text>
-                  </TouchableOpacity>
+                  </TouchableOpacity>*/}
                 </View>
                 <View style={[s.chips, isPhone && { marginTop: 12 }]}>
                   {[
@@ -663,13 +663,13 @@ export default function HomeScreen() {
               </Text>
               <Text style={s.phQuoteAttr}>— Michael By Christian</Text>
             </View>
-            <TouchableOpacity
+            {/*<TouchableOpacity
               style={s.btnGold}
               onPress={() => {}}
               activeOpacity={0.85}
             >
               <Text style={s.btnGoldTxt}>Own a Piece of This →</Text>
-            </TouchableOpacity>
+            </TouchableOpacity>*/}
           </View>
         </View>
 

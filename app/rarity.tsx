@@ -9,7 +9,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { C } from "../lib/theme";
@@ -335,13 +335,13 @@ export default function RarityScreen() {
           <View style={s.rule} />
 
           {/* ── CTA ── */}
-          <TouchableOpacity
+          {/*<TouchableOpacity
             style={s.ctaBtn}
             onPress={() => router.push("/collection" as any)}
             activeOpacity={0.85}
           >
             <Text style={s.ctaBtnTxt}>Browse the Collection →</Text>
-          </TouchableOpacity>
+          </TouchableOpacity>*/}
 
           <View style={{ height: 60 }} />
         </View>
