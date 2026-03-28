@@ -1,1190 +1,1791 @@
-"use client";
+// app/piece/[id].tsx
+// Reads bag data from Stellar + sale/claim state from KV
+// States: listed (buy now) | sold+unclaimed (claim NFT) | sold+claimed (ownership view)
 
-import { Video } from "expo-av";
-import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   Image,
+  Linking,
+  Modal,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { CartIcon } from "../../components/CartIcon";
 import { useAuth } from "../../context/AuthContext";
-import { C } from "../../lib/theme";
+import {
+  ADMIN_WALLET,
+  BACKEND,
+  C,
+  CONTRACT,
+  EXPLORER,
+  PASSPHRASE,
+  RPC_URL,
+} from "../../lib/theme";
 
-const useClientLayout = () => {
-  const [layout, setLayout] = useState({
-    w: 375,
-    h: 812,
-    isPhone: true,
-    isTablet: false,
-    isWeb: false,
-    isWebWide: false,
-  });
+const { width } = Dimensions.get("window");
+const IS_WEB = Platform.OS === "web";
+const MAX_W = IS_WEB ? 760 : undefined;
 
-  useEffect(() => {
-    const update = () => {
-      const dims = Dimensions.get("window");
-      const isWeb = Platform.OS === "web";
-      setLayout({
-        w: dims.width,
-        h: dims.height,
-        isPhone: dims.width < 480,
-        isTablet: dims.width >= 480 && dims.width < 900,
-        isWeb: isWeb && dims.width >= 900,
-        isWebWide: isWeb && dims.width >= 1400,
-      });
-    };
-    update();
-    const sub = Dimensions.addEventListener("change", update);
-    return () => sub?.remove();
-  }, []);
+// ── Stellar read ──────────────────────────────────────────────
+async function loadTokenFromStellar(tokenId: number) {
+  const Sdk = await import("@stellar/stellar-sdk" as any);
+  const server = new Sdk.rpc.Server(RPC_URL);
+  const contract = new Sdk.Contract(CONTRACT);
+  const keypair = Sdk.Keypair.random();
+  const account = new Sdk.Account(keypair.publicKey(), "0");
 
-  return layout;
-};
+  async function simulate(fn: string, args: any[] = []) {
+    const tx = new Sdk.TransactionBuilder(account, {
+      fee: Sdk.BASE_FEE,
+      networkPassphrase: PASSPHRASE,
+    })
+      .addOperation(contract.call(fn, ...args))
+      .setTimeout(30)
+      .build();
+    const sim = await server.simulateTransaction(tx);
+    if (!Sdk.rpc.Api.isSimulationSuccess(sim))
+      throw new Error("Simulation failed");
+    return Sdk.scValToNative(sim.result.retval);
+  }
 
-interface BagItem {
-  src: string | null;
-  name: string;
-  color: string;
-}
-// Bag images loaded from IPFS/remote — no local assets needed
-const BAGS: BagItem[] = [
-  { src: null, name: "Prototype - Haven", color: "White · Gold" },
-  { src: null, name: "Prototype - Haven", color: "Black · Gold" },
-  { src: null, name: "Prototype - The Bride", color: "Brown · Black" },
-  { src: null, name: "Prototype - The Bride", color: "Yellow · Red" },
-  { src: null, name: "Prototype - The Bride", color: "Red · Black" },
-  { src: null, name: "Prototype - The Bride", color: "Yellow · Black" },
-];
+  const tokenArg = Sdk.nativeToScVal(tokenId, { type: "u64" });
 
-const MARQUEE = [
-  "NFC Authentication",
-  "On-Chain Provenance",
-  "Stellar Blockchain",
-  "Handcrafted Luxury",
-  "Buy With Card",
-  "No Wallet Needed",
-  "Michael By Christian",
-  "Phygital Fashion",
-];
+  const [raw, ownerRaw] = await Promise.all([
+    simulate("full_token_data", [tokenArg]),
+    simulate("owner_of", [tokenArg]).catch(() => null),
+  ]);
 
-const CONCEPT_POINTS = [
-  {
-    num: "01",
-    title: "NFC Tap Authentication",
-    body: "Every bag carries an embedded NFC card. Scan it to instantly verify your piece is genuine and linked to your Serial Number and Authentication Contract (NFT) on-chain.",
-  },
-  {
-    num: "02",
-    title: "On-Chain Provenance",
-    body: "Design year, leather type, stitching, archive status — all recorded permanently on Stellar blockchain. Immutable. Forever yours.",
-  },
-  {
-    num: "03",
-    title: "Blockchain Made Easy",
-    body: "Credit Card, Apple Pay, or Google Pay. No crypto wallet needed — we create one for you and deliver your Authentication Contract (NFT) in seconds.",
-  },
-  {
-    num: "04",
-    title: "Community",
-    body: "Building an exclusive circle of owners, one authenticated transaction at a time. Every NFC tap and on-chain mint strengthens the collective.",
-  },
-];
+  const t = raw.traits || {};
+  const owner = ownerRaw ? String(ownerRaw).trim() : null;
+  const ownedByAdmin =
+    !owner || owner.toUpperCase() === ADMIN_WALLET.toUpperCase();
 
-const STATS = [
-  { num: "10+", lbl: "In-House Designed Perfume Formulas" },
-  { num: "15+", lbl: "Unique Handbag Silhouettes" },
-  { num: "50+", lbl: "Unique Variations Produced" },
-  { num: "2022–2026", lbl: "Founding Year — Phygital Integration Year" },
-];
+  // Build activity from on-chain data
+  const activity = [];
+  if (raw.minted_at || raw.tailored_year) {
+    activity.push({
+      type: "Minted",
+      date:
+        raw.minted_at || `${raw.tailored_year || raw.design_year || "2026"}`,
+      detail: "Token created on Stellar",
+    });
+  }
+  if (!ownedByAdmin && owner) {
+    activity.push({
+      type: "Transferred",
+      date: raw.transferred_at || "Recent",
+      detail: `To ${owner.slice(0, 8)}...${owner.slice(-6)}`,
+    });
+  }
 
-const PHYGITAL_CARDS = [
-  {
-    num: "01",
-    title: "Your bag lives forever",
-    accent: C.goldLt,
-    body: "Most luxury pieces disappear into time — stolen, sold, forgotten. When your MBC piece is minted on Stellar, its entire story lives on a public blockchain. Immutable. Permanent. Provably yours.",
-  },
-  {
-    num: "02",
-    title: "Authenticity you can touch",
-    accent: C.gold,
-    body: "Tap your phone to the MBC 'M' embedded in every bag and it instantly pulls up the on-chain record. No certificates. No third parties. No guessing. The blockchain is the receipt.",
-  },
-  {
-    num: "03",
-    title: "Fashion as an asset",
-    accent: C.gold,
-    body: "Traditional luxury is illiquid. Phygital is different — your ownership is transferable on-chain, your piece's history is transparent, and its provenance is verifiable by anyone, anywhere, forever.",
-  },
-  {
-    num: "04",
-    title: "The next era of collecting",
-    accent: C.gold,
-    body: "The world's most forward-thinking collectors are already moving here. MBC is not just a bag — it's a position in a new category of luxury that merges craft, culture, and cryptographic proof.",
-  },
-  {
-    num: "05",
-    title: "The next era of investing",
-    accent: C.green,
-    body: "Purchasing MBC phygital is entry into a groundbreaking asset class: the NFT Authentication Contract infuses your physical bag with on-chain intrinsic value — verifiable provenance, unbreakable authenticity, and seamless transferability.",
-  },
-];
-
-const STEPS = [
-  {
-    num: "A",
-    badge: "Easiest",
-    title: "Pay with Card, Apple Pay, or Google Pay",
-    body: "Enter your email and payment details via secure Stripe checkout. No crypto required — we handle everything.",
-  },
-  {
-    num: "B",
-    title: "We Create Your Stellar Wallet Automatically",
-    body: "If you don't have a wallet, we set one up for you instantly. You'll own it forever for NFTs, tokens, and the full Stellar ecosystem.",
-  },
-  {
-    num: "C",
-    title: "NFT Transfers to Your Wallet",
-    body: "Once payment clears, your Authentication Contract (NFT) transfers directly to your wallet in seconds. Wallet details sent by email.",
-  },
-  {
-    num: "D",
-    title: "Claim & Ship Your Physical Bag",
-    body: "Reply to your confirmation email with your shipping address — we verify ownership on-chain and dispatch your bag.",
-  },
-];
-
-function MarqueeTicker() {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const [rowWidth, setRowWidth] = useState(0);
-
-  useEffect(() => {
-    if (rowWidth === 0) return;
-    translateX.setValue(0);
-    Animated.loop(
-      Animated.timing(translateX, {
-        toValue: -rowWidth,
-        duration: rowWidth * 18,
-        useNativeDriver: Platform.OS !== "web",
-        isInteraction: false,
-      }),
-    ).start();
-  }, [rowWidth]);
-
-  const items = [...MARQUEE, ...MARQUEE, ...MARQUEE, ...MARQUEE];
-
-  return (
-    <View style={ts.wrap}>
-      <Animated.View
-        style={[ts.row, { transform: [{ translateX }] }]}
-        onLayout={(e) => {
-          if (rowWidth === 0) setRowWidth(e.nativeEvent.layout.width / 2);
-        }}
-      >
-        {items.map((item, i) => (
-          <React.Fragment key={i}>
-            <Text style={ts.item}>{item}</Text>
-            <Text style={ts.sep}>·</Text>
-          </React.Fragment>
-        ))}
-      </Animated.View>
-    </View>
-  );
+  return {
+    name: raw.name || `MBC Token #${tokenId}`,
+    image: raw.image || "",
+    price_usdc: raw.price_usdc ? Number(raw.price_usdc) : 0,
+    listed: raw.listed !== false,
+    owner,
+    ownedByAdmin,
+    silhouette: t.silhouette || raw.silhouette || "",
+    model: t.model || raw.model || "",
+    edition_type: t.edition_type || raw.edition_type || "",
+    primary_color: t.primary_color || raw.primary_color || "",
+    secondary_color: t.secondary_color || raw.secondary_color || "",
+    primary_texture: t.primary_texture || raw.primary_texture || "",
+    secondary_texture: t.secondary_texture || raw.secondary_texture || "",
+    textured_pattern: t.textured_pattern || raw.textured_pattern || "",
+    hardware: t.hardware || raw.hardware || "",
+    interior_lining: t.interior_lining || raw.interior_lining || "",
+    dimensions: t.dimensions || raw.dimensions || "",
+    authentication: t.authentication || raw.authentication || "",
+    serial_number: t.serial_number || raw.serial_number || "",
+    nfc_chip_id: t.nfc_chip_id || raw.nfc_chip_id || "",
+    collection: t.collection || raw.collection || "",
+    collaboration: t.collaboration || raw.collaboration || "",
+    design_status: t.design_status || raw.design_status || "",
+    archive_status: t.archive_status || raw.archive_status || "",
+    tailored_year: Number(t.tailored_year || raw.tailored_year || 0),
+    design_year: Number(t.design_year || raw.design_year || 0),
+    activity,
+  };
 }
 
-const ts = StyleSheet.create({
-  wrap: { backgroundColor: C.gold, paddingVertical: 10, overflow: "hidden" },
-  row: { flexDirection: "row", alignItems: "center" },
-  item: {
-    fontSize: 9,
-    letterSpacing: 3,
-    textTransform: "uppercase",
-    color: C.black,
-    fontWeight: "700",
-    flexShrink: 0,
-    paddingHorizontal: 12,
-  },
-  sep: {
-    fontSize: 9,
-    color: C.black,
-    opacity: 0.5,
-    paddingHorizontal: 14,
-    flexShrink: 0,
-  },
-});
+function resolveImg(img: string): string {
+  if (!img) return "";
+  if (img.startsWith("ipfs://"))
+    return img.replace("ipfs://", "https://ipfs.io/ipfs/");
+  return img;
+}
 
-export default function HomeScreen() {
-  const layout = useClientLayout();
-  const { w, h, isPhone, isTablet, isWeb, isWebWide } = layout;
-  const [menuOpen, setMenuOpen] = useState(false);
-  const { session } = useAuth();
-  const fade = useRef(new Animated.Value(0)).current;
-  const slideY = useRef(new Animated.Value(24)).current;
-  // Video hosted remotely — swap in your CDN/IPFS URL here
-  const VIDEO_URL = ""; // e.g. "https://your-cdn.com/hero-video.mp4"
+const TRAITS: [string, string][] = [
+  ["silhouette", "Silhouette"],
+  ["model", "Model"],
+  ["edition_type", "Edition"],
+  ["primary_color", "Primary Color"],
+  ["secondary_color", "Secondary Color"],
+  ["primary_texture", "Primary Texture"],
+  ["secondary_texture", "Secondary Texture"],
+  ["textured_pattern", "Pattern"],
+  ["hardware", "Hardware"],
+  ["interior_lining", "Interior Lining"],
+  ["dimensions", "Dimensions"],
+  ["authentication", "Authentication"],
+  ["serial_number", "Serial Number"],
+  ["nfc_chip_id", "NFC Chip ID"],
+  ["collection", "Collection"],
+  ["collaboration", "Collaboration"],
+  ["design_status", "Design Status"],
+  ["archive_status", "Archive Status"],
+  ["tailored_year", "Tailored Year"],
+  ["design_year", "Design Year"],
+];
+
+type BuyStep = "idle" | "checking" | "redirecting" | "unavailable" | "error";
+type ClaimStep = "idle" | "submitting" | "success" | "error";
+type PageState =
+  | "loading"
+  | "listed"
+  | "sold_unclaimed"
+  | "sold_claimed"
+  | "error";
+
+export default function PieceScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const tokenId = Number(id);
+  const { session, addToCart, isInCart, profile, cart } = useAuth();
+
+  const [data, setData] = useState<any | null>(null);
+  const [pageState, setPageState] = useState<PageState>("loading");
+  const [saleData, setSaleData] = useState<any | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [imgErr, setImgErr] = useState(false);
+
+  // Buy state
+  const [buyStep, setBuyStep] = useState<BuyStep>("idle");
+  const [buyError, setBuyError] = useState("");
+
+  // Claim state
+  const [claimStep, setClaimStep] = useState<ClaimStep>("idle");
+  const [claimEmail, setClaimEmail] = useState("");
+  const [claimWallet, setClaimWallet] = useState("");
+  const [claimResult, setClaimResult] = useState<any | null>(null);
+  const [claimError, setClaimError] = useState("");
+
+  // Offer modal
+  const [offerVisible, setOfferVisible] = useState(false);
+
+  // XLM gain for sold items
+  const [gainPercent, setGainPercent] = useState<number | null>(null);
+
+  // Rarity from KV
+  const [rarityData, setRarityData] = useState<any | null>(null);
+
+  const fadeIn = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fade, {
+    load();
+  }, [tokenId]);
+
+  // Auto-fill email + wallet if logged in
+  useEffect(() => {
+    if (session?.user?.email && !claimEmail) {
+      setClaimEmail(session.user.email);
+    }
+    if (profile?.stellar_wallet_public && !claimWallet) {
+      setClaimWallet(profile.stellar_wallet_public);
+    }
+  }, [session, profile]);
+
+  async function load() {
+    setPageState("loading");
+    setError(null);
+    try {
+      const [tokenData, soldRes, gainsRes, rarityRes] = await Promise.all([
+        loadTokenFromStellar(tokenId),
+        fetch(`${BACKEND}/api/sold?type=check&token_id=${tokenId}`)
+          .then((r) => r.json())
+          .catch(() => ({ sold: false })),
+        fetch(`${BACKEND}/api/sold?type=gains`)
+          .then((r) => r.json())
+          .catch(() => null),
+        fetch(`${BACKEND}/api/rarity?type=token&token_id=${tokenId}`)
+          .then((r) => r.json())
+          .catch(() => null),
+      ]);
+      if (gainsRes?.gains?.[tokenId]) setGainPercent(gainsRes.gains[tokenId]);
+      if (rarityRes?.found) setRarityData(rarityRes);
+
+      setData(tokenData);
+      setSaleData(soldRes);
+
+      if (!soldRes.sold) {
+        setPageState("listed");
+      } else {
+        // Cross-reference on-chain owner with KV claimed state.
+        // If owner is not the admin wallet the NFT has already been transferred.
+        const onChainClaimed =
+          !!tokenData.owner &&
+          tokenData.owner.toUpperCase() !== ADMIN_WALLET.toUpperCase();
+
+        if (soldRes.claimed || onChainClaimed) {
+          // Sync KV if it still shows unclaimed but chain shows transferred
+          if (!soldRes.claimed && onChainClaimed) {
+            setSaleData((prev: any) => ({
+              ...prev,
+              claimed: true,
+              buyerWallet: tokenData.owner,
+            }));
+          }
+          setPageState("sold_claimed");
+        } else {
+          setPageState("sold_unclaimed");
+        }
+      }
+
+      Animated.timing(fadeIn, {
         toValue: 1,
-        duration: 1000,
-        delay: 100,
+        duration: 400,
         useNativeDriver: true,
-      }),
-      Animated.timing(slideY, {
-        toValue: 0,
-        duration: 800,
-        delay: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
+      }).start();
+    } catch (e: any) {
+      setError(e.message);
+      setPageState("error");
+    }
+  }
 
-  const sidePad = isPhone ? 18 : 24;
-  const heroH = isPhone ? Math.min(h * 0.58, 460) : isTablet ? h * 0.68 : 540;
-  const heroTitleSize = isPhone ? 40 : isTablet ? 48 : 58;
-  const h2Size = isPhone ? 28 : 36;
-  const maxW = isWeb ? 760 : undefined;
+  // ── Buy ───────────────────────────────────────────────────────
+  async function buyNFT() {
+    setBuyStep("checking");
+    setBuyError("");
+    try {
+      // If there are items already in cart, check if this piece is one of them.
+      // If not, add it first, then checkout the full cart.
+      // If cart is empty, just checkout this single piece.
+      const cartItems = cart.length > 0 ? cart : null;
+      const thisItemInCart = isInCart(tokenId);
 
-  // ── NAV_LINKS — Production: index + rarity only ──────────────
-  const NAV_LINKS = [{ label: "Rarity", path: "/rarity", gold: true }];
+      // Build the items list for checkout
+      let checkoutItems;
+      if (cartItems && cartItems.length > 0) {
+        // Cart has items — include them all
+        // If current piece is not in cart yet, add it to the checkout list too
+        const base = cartItems.map((i) => ({
+          tokenId: String(i.token_id),
+          name: i.bag_name,
+          price: i.price_usdc,
+          image: i.image,
+        }));
+        if (!thisItemInCart) {
+          base.push({
+            tokenId: String(tokenId),
+            name: data.name,
+            price: data.price_usdc,
+            image: imgUrl || null,
+          });
+        }
+        checkoutItems = base;
+      } else {
+        // No cart — just this piece
+        checkoutItems = [
+          {
+            tokenId: String(tokenId),
+            name: data.name,
+            price: data.price_usdc,
+            image: imgUrl || null,
+          },
+        ];
+      }
 
-  const COLS = isPhone ? 2 : 3;
+      const successBase = IS_WEB
+        ? `${window.location.origin}/success`
+        : `${BACKEND}/success`;
+      const cancelBase = IS_WEB ? window.location.href : `${BACKEND}/`;
+
+      const res = await fetch(`${BACKEND}/api/create-checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: checkoutItems,
+          successUrl: successBase,
+          cancelUrl: cancelBase,
+        }),
+      });
+      const json = await res.json();
+      if (json.url) {
+        setBuyStep("redirecting");
+        if (IS_WEB) window.location.href = json.url;
+        else {
+          await Linking.openURL(json.url);
+          setBuyStep("idle");
+        }
+      } else if (json.unavailable) {
+        setBuyStep("unavailable");
+        setBuyError(
+          `Token #${json.tokenId || tokenId} is no longer available. No charge has been made.`,
+        );
+      } else {
+        setBuyStep("error");
+        setBuyError(json.error || "Could not open checkout. Please try again.");
+      }
+    } catch (e: any) {
+      setBuyStep("error");
+      setBuyError(e.message || "Network error. Please try again.");
+    }
+  }
+
+  // ── Claim ─────────────────────────────────────────────────────
+  async function submitClaim() {
+    if (!claimEmail.trim()) {
+      setClaimError("Please enter your email");
+      return;
+    }
+    setClaimStep("submitting");
+    setClaimError("");
+    try {
+      const res = await fetch(`${BACKEND}/api/claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tokenId: String(tokenId),
+          buyerEmail: claimEmail.trim(),
+          walletAddress: claimWallet.trim() || null,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setClaimResult(json);
+        setClaimStep("success");
+        setSaleData({
+          ...saleData,
+          claimed: true,
+          buyerWallet: json.buyerWallet,
+        });
+        setPageState("sold_claimed");
+      } else {
+        setClaimStep("error");
+        setClaimError(json.error || "Claim failed. Please try again.");
+      }
+    } catch (e: any) {
+      setClaimStep("error");
+      setClaimError(e.message || "Network error.");
+    }
+  }
+
+  const imgUrl = data ? resolveImg(data.image) : "";
+  const price = data?.price_usdc
+    ? `${(data.price_usdc / 100).toFixed(0)}`
+    : "—";
+
+  const init = (data?.name || "MB")
+    .split(" ")
+    .map((w: string) => w[0])
+    .join("")
+    .substring(0, 2)
+    .toUpperCase();
+  const short = (a: string) => (a ? `${a.slice(0, 8)}...${a.slice(-6)}` : "—");
+
+  const buyDisabled =
+    buyStep === "checking" ||
+    buyStep === "redirecting" ||
+    buyStep === "unavailable";
+
+  // ── Loading ───────────────────────────────────────────────────
+  if (pageState === "loading")
+    return (
+      <View style={s.screen}>
+        <ActivityIndicator color={C.gold} size="large" />
+        <Text style={s.loadTxt}>Loading piece...</Text>
+      </View>
+    );
+
+  if (pageState === "error" || !data)
+    return (
+      <View style={s.screen}>
+        <Text style={s.errTitle}>Could not load piece</Text>
+        <Text style={s.errSub}>{error}</Text>
+        <TouchableOpacity style={s.retryBtn} onPress={load}>
+          <Text style={s.retryTxt}>Retry</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={{ marginTop: 16 }}
+        >
+          <Text style={s.backLink}>← Back to Collection</Text>
+        </TouchableOpacity>
+      </View>
+    );
 
   return (
     <View style={s.root}>
-      {/* ── NAV ── */}
-      <SafeAreaView edges={["top"]} style={s.navSafe}>
-        <View style={[s.nav, { paddingHorizontal: sidePad }]}>
-          <View
-            style={[
-              s.navInner,
-              maxW
-                ? { maxWidth: maxW, alignSelf: "center", width: "100%" }
-                : {},
-            ]}
+      {/* ── Top bar ── */}
+      <SafeAreaView edges={["top"]} style={s.topBar}>
+        <View
+          style={[
+            s.topBarInner,
+            MAX_W
+              ? { maxWidth: MAX_W, alignSelf: "center" as const, width: "100%" }
+              : {},
+          ]}
+        >
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={s.backBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <View>
-              <Text style={s.navEye}>Collection 2026</Text>
-              <Text style={s.navLogo}>
-                Michael <Text style={s.navLogoEm}>By Christian</Text>
-              </Text>
-            </View>
-
-            {/* Desktop — inline links */}
-            {!isPhone && (
-              <View style={s.navLinks}>
-                {NAV_LINKS.map((l) => (
-                  <TouchableOpacity
-                    key={l.label}
-                    onPress={() => router.push(l.path as any)}
-                  >
-                    <Text style={[s.navLink, l.gold && { color: C.gold }]}>
-                      {l.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {/* Phone — hamburger */}
-            {isPhone && (
-              <TouchableOpacity
-                onPress={() => setMenuOpen(!menuOpen)}
-                style={s.hamburger}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <View style={[s.hLine, menuOpen && s.hLineTop]} />
-                <View style={[s.hLine, menuOpen && s.hLineMid]} />
-                <View style={[s.hLine, menuOpen && s.hLineBot]} />
-              </TouchableOpacity>
-            )}
+            <Text style={s.backTxt}>← Collection</Text>
+          </TouchableOpacity>
+          <View style={s.topBarCenter}>
+            <Text style={s.topEye}>Michael By Christian</Text>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+            <TouchableOpacity
+              onPress={() => router.push("/rarity" as any)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={s.rarityNavLink}>✦ Rarity</Text>
+            </TouchableOpacity>
+            <CartIcon />
+            <TouchableOpacity
+              onPress={() =>
+                router.push(session ? "/profile" : ("/auth" as any))
+              }
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={s.rarityNavLink}>{session ? "👤" : "Sign In"}</Text>
+            </TouchableOpacity>
           </View>
         </View>
-
-        {/* Mobile dropdown */}
-        {isPhone && menuOpen && (
-          <View style={s.mobileMenu}>
-            {NAV_LINKS.map((l) => (
-              <TouchableOpacity
-                key={l.label}
-                style={s.mobileMenuItem}
-                onPress={() => {
-                  setMenuOpen(false);
-                  router.push(l.path as any);
-                }}
-              >
-                <Text style={[s.mobileMenuTxt, l.gold && { color: C.gold }]}>
-                  {l.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
       </SafeAreaView>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* ── HERO ── */}
-        <View style={s.heroSection}>
-          <View style={[s.heroFrame, { height: heroH, width: "100%" }]}>
-            <View style={s.heroMedia}>
-              {VIDEO_URL ? (
-                <Video
-                  source={{ uri: VIDEO_URL }}
-                  style={s.heroVideo}
-                  resizeMode={isPhone ? "contain" : ("cover" as any)}
-                  shouldPlay
-                  isLooping
-                  isMuted
-                />
+      <Animated.ScrollView
+        style={{ opacity: fadeIn }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Hero image ── */}
+        <View
+          style={[
+            s.imgWrap,
+            IS_WEB && {
+              maxWidth: MAX_W,
+              alignSelf: "center" as const,
+              width: "100%",
+            },
+          ]}
+        >
+          {imgUrl && !imgErr ? (
+            <Image
+              source={{ uri: imgUrl }}
+              style={s.img}
+              resizeMode={IS_WEB ? "contain" : "cover"}
+              onError={() => setImgErr(true)}
+            />
+          ) : (
+            <View style={s.imgPlaceholder}>
+              <Text style={s.imgInit}>{init}</Text>
+            </View>
+          )}
+          <View style={s.imgOverlay} />
+          <View style={s.tokenBadge}>
+            <Text style={s.tokenBadgeTxt}>Token #{tokenId}</Text>
+          </View>
+          {data.nfc_chip_id ? (
+            <View style={s.nfcBadge}>
+              <Text style={s.nfcBadgeTxt}>✦ NFC Verified</Text>
+            </View>
+          ) : null}
+
+          {/* ── Status badge ── */}
+          {pageState === "listed" && (
+            <View style={s.listedBadge}>
+              <Text style={s.listedBadgeTxt}>Listed</Text>
+            </View>
+          )}
+          {pageState === "sold_unclaimed" && (
+            <View style={s.soldBadge}>
+              <Text style={s.soldBadgeTxt}>Sold · NFT Unclaimed</Text>
+            </View>
+          )}
+          {pageState === "sold_claimed" && (
+            <View style={s.claimedBadge}>
+              <Text style={s.claimedBadgeTxt}>✦ NFT Claimed</Text>
+            </View>
+          )}
+        </View>
+
+        {/* ── Main content ── */}
+        <View
+          style={[
+            s.content,
+            IS_WEB && {
+              maxWidth: MAX_W,
+              alignSelf: "center" as const,
+              width: "100%",
+            },
+          ]}
+        >
+          {/* Title + price */}
+          <View style={s.titleRow}>
+            <View style={{ flex: 1, marginRight: 16 }}>
+              <Text style={s.eyebrow}>
+                MBC · {data.collection || "Collection 2026"}
+              </Text>
+              <Text style={s.pieceTitle}>{data.name}</Text>
+              {data.silhouette ? (
+                <Text style={s.pieceSub}>
+                  {data.silhouette}
+                  {data.edition_type ? `  ·  ${data.edition_type}` : ""}
+                </Text>
+              ) : null}
+            </View>
+            <View style={s.priceBox}>
+              {pageState === "listed" ? (
+                <>
+                  <Text style={s.priceVal}>{price}</Text>
+                  <Text style={s.priceLbl}>USD</Text>
+                </>
               ) : (
-                <View style={[s.heroVideo, { backgroundColor: "#0C0B09" }]} />
+                <>
+                  <Text style={s.lastSaleLbl}>Last Sale</Text>
+                  <Text style={s.priceVal}>{price}</Text>
+                  <Text style={s.priceLbl}>USD</Text>
+                </>
               )}
             </View>
-            <LinearGradient
-              colors={
-                isPhone
-                  ? ["transparent", "rgba(12,11,9,0.28)", "rgba(12,11,9,0.82)"]
-                  : ["transparent", "rgba(12,11,9,0.6)", C.black]
-              }
-              locations={[0.2, 0.65, 1]}
-              style={s.heroOverlay}
-            />
-            <Animated.View
-              style={[
-                s.heroContent,
-                { opacity: fade, transform: [{ translateY: slideY }] },
-              ]}
-            >
-              <View style={[s.heroInner, { paddingHorizontal: sidePad }]}>
-                <Text
-                  style={[
-                    s.heroEye,
-                    isPhone && { fontSize: 8, letterSpacing: 2 },
-                  ]}
-                >
-                  Phygital · Luxury Fashion · Stellar · Est. 2026
-                </Text>
-                <Text
-                  style={[
-                    s.heroTitle,
-                    {
-                      fontSize: heroTitleSize,
-                      lineHeight: heroTitleSize * 0.98,
-                    },
-                  ]}
-                >
-                  Michael
-                </Text>
-                <Text
-                  style={[
-                    s.heroSub,
-                    {
-                      fontSize: heroTitleSize,
-                      lineHeight: heroTitleSize * 1.1,
-                    },
-                  ]}
-                >
-                  By Christian
-                </Text>
-                <Text
-                  style={[
-                    s.heroTagline,
-                    isPhone && { fontSize: 13, maxWidth: "100%" },
-                  ]}
-                >
-                  Where artisan craft meets immutable provenance.{"\n"}Every
-                  stitch signed on-chain.
-                </Text>
-                <View style={[s.ctaRow, isPhone && { marginTop: 20 }]}>
-                  <TouchableOpacity
-                    style={[
-                      s.btnWhite,
-                      isPhone && { paddingHorizontal: 20, paddingVertical: 12 },
-                    ]}
-                    onPress={() => {}}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={[s.btnWhiteTxt, isPhone && { fontSize: 9 }]}>
-                      Browse & Buy
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      s.btnGhost,
-                      isPhone && { paddingHorizontal: 20, paddingVertical: 12 },
-                    ]}
-                    onPress={() => router.push("/profile")}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={[s.btnGhostTxt, isPhone && { fontSize: 9 }]}>
-                      My Pieces
-                    </Text>
-                  </TouchableOpacity>
+          </View>
+
+          {/* Trait chips */}
+          <View style={s.chips}>
+            {[
+              data.primary_texture,
+              data.hardware,
+              data.nfc_chip_id && "NFC Embedded",
+            ]
+              .filter(Boolean)
+              .map((v: string, i: number) => (
+                <View key={i} style={s.chip}>
+                  <Text style={s.chipTxt}>{v}</Text>
                 </View>
-                <View style={[s.chips, isPhone && { marginTop: 12 }]}>
-                  {[
-                    "💳 Card",
-                    "🍎 Apple Pay",
-                    "G Google Pay",
-                    "👜 No Wallet",
-                  ].map((p) => (
-                    <View key={p} style={s.chip}>
-                      <Text style={s.chipTxt}>{p}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            </Animated.View>
-          </View>
-        </View>
-
-        {/* ── TICKER ── */}
-        <MarqueeTicker />
-
-        {/* ── CONCEPT ── */}
-        <View style={[s.section, { paddingHorizontal: sidePad }]}>
-          <View
-            style={
-              maxW ? { maxWidth: maxW, alignSelf: "center", width: "100%" } : {}
-            }
-          >
-            <Text style={s.eyebrow}>The Concept</Text>
-            <Text
-              style={[s.h2, { fontSize: h2Size, lineHeight: h2Size * 1.1 }]}
-            >
-              Where craft meets{"\n"}
-              <Text style={s.h2Em}>the chain</Text>
-            </Text>
-            <Text style={s.bodyText}>
-              MBC is the first luxury fashion house where every physical bag is
-              paired with an NFT — a permanent, verifiable record of ownership
-              and heritage that no traditional house can offer.
-            </Text>
-            {CONCEPT_POINTS.map((p, i) => (
-              <View key={p.num} style={[s.point, i === 0 && { marginTop: 8 }]}>
-                <Text style={s.pointNum}>{p.num}</Text>
-                <View style={s.pointRight}>
-                  <Text style={s.pointTitle}>{p.title}</Text>
-                  <Text style={s.pointBody}>{p.body}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* ── STATS ── */}
-        <View style={[s.statsSection, { paddingHorizontal: sidePad }]}>
-          <View
-            style={
-              maxW ? { maxWidth: maxW, alignSelf: "center", width: "100%" } : {}
-            }
-          >
-            <Text style={s.eyebrow}>By The Numbers</Text>
-            {STATS.map((st, i) => (
-              <View
-                key={st.lbl}
-                style={[s.statRow, i < STATS.length - 1 && s.statDivider]}
-              >
-                <Text
-                  style={[
-                    s.statNum,
-                    isPhone && { fontSize: 36, lineHeight: 36 },
-                  ]}
-                >
-                  {st.num}
-                </Text>
-                <Text style={s.statLbl}>{st.lbl}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* ── COLLECTION CTA ── */}
-        <View style={s.collSection}>
-          <View
-            style={[
-              { paddingHorizontal: sidePad, paddingTop: 52, paddingBottom: 24 },
-              maxW
-                ? { maxWidth: maxW, alignSelf: "center", width: "100%" }
-                : {},
-            ]}
-          >
-            <Text style={s.eyebrow}>The Collection</Text>
-            <Text
-              style={[s.h2, { fontSize: h2Size, lineHeight: h2Size * 1.1 }]}
-            >
-              Current <Text style={s.h2Em}>Pieces</Text>
-            </Text>
-            <Text style={s.bodyText}>
-              Pay by card, Apple Pay, or Google Pay.{"\n"}No wallet needed — NFT
-              delivered instantly.
-            </Text>
-            <TouchableOpacity
-              style={s.btnGold}
-              onPress={() => {}}
-              activeOpacity={0.85}
-            >
-              <Text style={s.btnGoldTxt}>Browse All Pieces & Buy →</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={[s.bagGrid, { paddingHorizontal: 2 }]}>
-            <View style={s.bagRow}>
-              {BAGS.slice(0, COLS).map((bag, i) => (
-                <TouchableOpacity
-                  key={i}
-                  style={s.bagCard}
-                  onPress={() => {}}
-                  activeOpacity={0.88}
-                >
-                  <View style={s.bagImgWrap}>
-                    {bag.src ? (
-                      <Image
-                        source={{ uri: bag.src }}
-                        style={s.bagImg}
-                        resizeMode="contain"
-                      />
-                    ) : (
-                      <View
-                        style={[s.bagImg, { backgroundColor: "#1A1916" }]}
-                      />
-                    )}
-                  </View>
-                  <View style={s.bagCardBody}>
-                    <Text style={s.bagName} numberOfLines={1}>
-                      {bag.name}
-                    </Text>
-                    <Text style={s.bagColor}>{bag.color}</Text>
-                  </View>
-                </TouchableOpacity>
               ))}
-            </View>
-            <View style={s.bagRow}>
-              {BAGS.slice(COLS, COLS * 2).map((bag, i) => (
-                <TouchableOpacity
-                  key={i}
-                  style={s.bagCard}
-                  onPress={() => {}}
-                  activeOpacity={0.88}
-                >
-                  <View style={s.bagImgWrap}>
-                    {bag.src ? (
-                      <Image
-                        source={{ uri: bag.src }}
-                        style={s.bagImg}
-                        resizeMode="contain"
-                      />
-                    ) : (
-                      <View
-                        style={[s.bagImg, { backgroundColor: "#1A1916" }]}
-                      />
-                    )}
-                  </View>
-                  <View style={s.bagCardBody}>
-                    <Text style={s.bagName} numberOfLines={1}>
-                      {bag.name}
-                    </Text>
-                    <Text style={s.bagColor}>{bag.color}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
           </View>
-        </View>
 
-        {/* ── HOW PHYGITAL WORKS ── */}
-        <View style={[s.section, s.sectionAlt, { paddingHorizontal: sidePad }]}>
-          <View
-            style={
-              maxW ? { maxWidth: maxW, alignSelf: "center", width: "100%" } : {}
-            }
-          >
-            <Text style={s.eyebrow}>How Phygital Works</Text>
-            <Text
-              style={[s.h2, { fontSize: h2Size, lineHeight: h2Size * 1.1 }]}
-            >
-              Engrave Yourself{"\n"}Into History,{" "}
-              <Text style={s.h2Em}>Digitally</Text>
-            </Text>
-            <Text style={s.phygitalLead}>
-              Phygital is not a gimmick. It's the convergence of two things that
-              have never properly existed together: the warmth of handcrafted
-              luxury and the permanence of the blockchain.
-            </Text>
-            {PHYGITAL_CARDS.map((card, i) => (
-              <View
-                key={card.num}
-                style={[s.phCard, i === 0 && { marginTop: 8 }]}
-              >
-                <View style={[s.phCardNum, { borderColor: card.accent }]}>
-                  <Text style={[s.phCardNumTxt, { color: card.accent }]}>
-                    {card.num}
-                  </Text>
-                </View>
-                <View style={s.phCardBody}>
-                  <Text style={s.phCardTitle}>{card.title}</Text>
-                  <Text style={s.phCardText}>{card.body}</Text>
-                </View>
+          {/* ── Rarity info ── */}
+          {rarityData && (
+            <View style={s.rarityRow}>
+              <View style={s.rarityItem}>
+                <Text style={s.rarityLabel}>Rarity Rank</Text>
+                <Text style={s.rarityVal}>
+                  #{rarityData.rank}{" "}
+                  <Text style={s.rarityOf}>of {rarityData.total}</Text>
+                </Text>
               </View>
-            ))}
-            <View style={s.phQuote}>
-              <Text style={s.phQuoteMark}>"</Text>
-              <Text style={[s.phQuoteText, isPhone && { fontSize: 15 }]}>
-                The question is no longer whether luxury will go on-chain. It's
-                who gets there first with something worth owning.
-              </Text>
-              <Text style={s.phQuoteAttr}>— Michael By Christian</Text>
+              <View style={s.rarityItem}>
+                <Text style={s.rarityLabel}>Tier</Text>
+                <Text style={s.rarityVal}>{rarityData.label}</Text>
+              </View>
+              <View style={s.rarityItem}>
+                <Text style={s.rarityLabel}>Top</Text>
+                <Text style={s.rarityVal}>
+                  {rarityData.percentile?.toFixed(1)}%
+                </Text>
+              </View>
+              <View style={[s.rarityItem, { borderRightWidth: 0 }]}>
+                <Text style={s.rarityLabel}>Traits</Text>
+                <Text style={s.rarityVal}>{rarityData.traitCount}</Text>
+              </View>
             </View>
-            <TouchableOpacity
-              style={s.btnGold}
-              onPress={() => {}}
-              activeOpacity={0.85}
-            >
-              <Text style={s.btnGoldTxt}>Own a Piece of This →</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+          )}
 
-        {/* ── HOW TO BUY ── */}
-        <View style={[s.section, s.sectionAlt, { paddingHorizontal: sidePad }]}>
-          <View
-            style={
-              maxW ? { maxWidth: maxW, alignSelf: "center", width: "100%" } : {}
-            }
-          >
-            <Text style={s.eyebrow}>How To Buy</Text>
-            <Text
-              style={[s.h2, { fontSize: h2Size, lineHeight: h2Size * 1.1 }]}
-            >
-              Own In A Few <Text style={s.h2Em}>Simple Steps</Text>
-            </Text>
-            {STEPS.map((step, i) => (
-              <View
-                key={step.num}
-                style={[s.step, i === 0 && { marginTop: 8 }]}
-              >
-                <View style={s.stepNumBox}>
-                  <Text style={s.stepNumTxt}>{step.num}</Text>
-                </View>
-                <View style={s.stepRight}>
-                  <View style={s.stepTitleRow}>
-                    <Text style={s.stepTitle}>{step.title}</Text>
-                    {step.badge && (
-                      <View style={s.badge}>
-                        <Text style={s.badgeTxt}>{step.badge}</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={s.stepBody}>{step.body}</Text>
-                </View>
-              </View>
-            ))}
-            <View style={s.callout}>
-              <Text style={s.calloutTitle}>· Checkout the Collection ·</Text>
+          {/* ── Add to Cart + Keep Shopping ── */}
+          {pageState === "listed" && (
+            <View style={{ flexDirection: "row", gap: 10, marginBottom: 10 }}>
               <TouchableOpacity
-                style={s.btnBorder}
-                onPress={() => {}}
+                style={[s.cartAddBtn, isInCart(tokenId) && s.cartAddBtnActive]}
+                onPress={() =>
+                  isInCart(tokenId)
+                    ? router.push("/cart" as any)
+                    : addToCart({
+                        token_id: tokenId,
+                        bag_name: data.name,
+                        price_usdc: data.price_usdc,
+                        image: imgUrl || null,
+                      })
+                }
                 activeOpacity={0.85}
               >
-                <Text style={s.btnBorderTxt}>Browse & Buy →</Text>
+                <Text
+                  style={[
+                    s.cartAddBtnTxt,
+                    isInCart(tokenId) && { color: C.black },
+                  ]}
+                >
+                  {isInCart(tokenId) ? "✓ In Cart" : "+ Add to Cart"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={s.keepShoppingBtn}
+                onPress={() => router.push("/collection" as any)}
+                activeOpacity={0.85}
+              >
+                <Text style={s.keepShoppingBtnTxt}>← Keep Shopping</Text>
               </TouchableOpacity>
             </View>
+          )}
+
+          {/* ── PAGE STATE: LISTED — Buy button ── */}
+          {pageState === "listed" && (
+            <>
+              <TouchableOpacity
+                style={[s.buyBtn, buyDisabled && s.buyBtnDisabled]}
+                onPress={buyNFT}
+                disabled={buyDisabled}
+                activeOpacity={0.85}
+              >
+                {buyStep === "checking" || buyStep === "redirecting" ? (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    <ActivityIndicator color={C.black} size="small" />
+                    <Text style={s.buyBtnTxt}>
+                      {buyStep === "checking"
+                        ? "Checking availability..."
+                        : "Redirecting to Stripe..."}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={s.buyBtnTxt}>
+                    {buyStep === "unavailable"
+                      ? "No Longer Available"
+                      : buyStep === "error"
+                        ? "Try Again"
+                        : `Purchase This Piece  —  ${price}`}
+                  </Text>
+                )}
+              </TouchableOpacity>
+              {(buyStep === "error" || buyStep === "unavailable") && (
+                <View
+                  style={[
+                    s.buyErrorBox,
+                    buyStep === "unavailable" && s.buyErrorBoxWarn,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      s.buyErrorTxt,
+                      buyStep === "unavailable" && { color: C.gold },
+                    ]}
+                  >
+                    {buyError}
+                  </Text>
+                  {buyStep === "error" && (
+                    <TouchableOpacity onPress={() => setBuyStep("idle")}>
+                      <Text style={s.buyErrorReset}>Dismiss</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+              <Text style={s.buyNote}>
+                💳 Card · 🍎 Apple Pay · G Google Pay{"\n"}Secure checkout
+                powered by Stripe
+              </Text>
+            </>
+          )}
+
+          {/* ── PAGE STATE: SOLD + UNCLAIMED — Claim section ── */}
+          {pageState === "sold_unclaimed" && (
+            <View style={s.claimBox}>
+              <Text style={s.claimTitle}>
+                Claim Your Authentication Contract
+              </Text>
+              {gainPercent ? (
+                <View style={s.gainRow}>
+                  <Text style={s.gainLabel}>Contract Gain</Text>
+                  <Text style={s.gainVal}>↑ {gainPercent}%</Text>
+                </View>
+              ) : null}
+              <Text style={s.claimSub}>
+                This piece has been purchased. If you are the buyer, enter your
+                email to claim your NFT.
+              </Text>
+
+              {claimStep === "success" ? (
+                <View style={s.claimSuccess}>
+                  <Text style={s.claimSuccessTitle}>
+                    ✓ NFT Claimed Successfully
+                  </Text>
+                  <Text style={s.claimSuccessSub}>
+                    Token #{tokenId} has been transferred to your Stellar
+                    wallet.
+                    {claimResult?.isCustodial
+                      ? " Wallet details sent to your email."
+                      : ""}
+                  </Text>
+                  {claimResult?.txHash && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        const url = `${EXPLORER}/tx/${claimResult.txHash}`;
+                        if (IS_WEB) window.open(url, "_blank");
+                        else Linking.openURL(url);
+                      }}
+                    >
+                      <Text style={s.txLink}>View Transaction ↗</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : (
+                <>
+                  {/* If logged in, show read-only email + wallet — no need to type */}
+                  {session?.user?.email ? (
+                    <View style={s.claimAutoFill}>
+                      <Text style={s.claimAutoFillLabel}>Claiming as</Text>
+                      <Text style={s.claimAutoFillVal}>
+                        {session.user.email}
+                      </Text>
+                      {profile?.stellar_wallet_public && (
+                        <Text style={s.claimAutoFillWallet} numberOfLines={1}>
+                          {profile.stellar_wallet_public.slice(0, 12)}...
+                          {profile.stellar_wallet_public.slice(-6)}
+                        </Text>
+                      )}
+                    </View>
+                  ) : (
+                    <>
+                      <TextInput
+                        style={s.claimInput}
+                        placeholder="Your email address"
+                        placeholderTextColor={C.muted}
+                        value={claimEmail}
+                        onChangeText={setClaimEmail}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                      />
+                      <TextInput
+                        style={s.claimInput}
+                        placeholder="Stellar wallet address (optional — we'll create one for you)"
+                        placeholderTextColor={C.muted}
+                        value={claimWallet}
+                        onChangeText={setClaimWallet}
+                        autoCapitalize="none"
+                      />
+                    </>
+                  )}
+                  {claimError ? (
+                    <Text style={s.claimError}>{claimError}</Text>
+                  ) : null}
+                  {/* closes the guest input block */}
+                  <TouchableOpacity
+                    style={[
+                      s.claimBtn,
+                      claimStep === "submitting" && s.buyBtnDisabled,
+                    ]}
+                    onPress={submitClaim}
+                    disabled={claimStep === "submitting"}
+                    activeOpacity={0.85}
+                  >
+                    {claimStep === "submitting" ? (
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 10,
+                        }}
+                      >
+                        <ActivityIndicator color={C.black} size="small" />
+                        <Text style={s.buyBtnTxt}>Claiming...</Text>
+                      </View>
+                    ) : (
+                      <Text style={s.buyBtnTxt}>Claim NFT →</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
+
+              <TouchableOpacity
+                style={s.offerBtnRow}
+                onPress={() => setOfferVisible(true)}
+              >
+                <Text style={s.offerBtnTxt}>Make an Offer</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* ── PAGE STATE: SOLD + CLAIMED — Ownership view ── */}
+          {pageState === "sold_claimed" && (
+            <View style={s.ownerBox}>
+              <View style={s.ownerRow}>
+                <Text style={s.ownerLabel}>Owner</Text>
+                <Text style={s.ownerVal}>
+                  {saleData?.buyerWallet
+                    ? short(saleData.buyerWallet)
+                    : "Verified Owner"}
+                </Text>
+              </View>
+              {saleData?.soldAt && (
+                <View style={s.ownerRow}>
+                  <Text style={s.ownerLabel}>Acquired</Text>
+                  <Text style={s.ownerVal}>
+                    {new Date(saleData.soldAt).toLocaleDateString()}
+                  </Text>
+                </View>
+              )}
+              <View style={s.ownerRow}>
+                <Text style={s.ownerLabel}>Last Sale</Text>
+                <Text style={[s.ownerVal, { color: C.goldLt }]}>
+                  {price} USD
+                </Text>
+              </View>
+              <View style={s.ownerRow}>
+                <Text style={s.ownerLabel}>NFT Status</Text>
+                <Text style={[s.ownerVal, { color: C.green }]}>
+                  ✦ Claimed On-Chain
+                </Text>
+              </View>
+              {gainPercent ? (
+                <View style={s.ownerRow}>
+                  <Text style={s.ownerLabel}>Contract Gain</Text>
+                  <Text
+                    style={[s.ownerVal, { color: C.green, fontWeight: "700" }]}
+                  >
+                    ↑ {gainPercent}%
+                  </Text>
+                </View>
+              ) : null}
+              <TouchableOpacity
+                style={s.offerBtnRow}
+                onPress={() => setOfferVisible(true)}
+              >
+                <Text style={s.offerBtnTxt}>Make an Offer</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <View style={s.rule} />
+
+          {/* ── Activity section (shown when sold) ── */}
+          {(pageState === "sold_unclaimed" || pageState === "sold_claimed") && (
+            <>
+              <Text style={s.sectionLbl}>Activity</Text>
+              <View style={s.activityBox}>
+                {/* Mint event */}
+                <View style={s.activityRow}>
+                  <View style={s.activityDot} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.activityType}>Minted</Text>
+                    <Text style={s.activityDetail}>
+                      Token created on Stellar · Contract {short(CONTRACT)}
+                    </Text>
+                  </View>
+                  <Text style={s.activityDate}>
+                    {data.tailored_year || data.design_year || "2026"}
+                  </Text>
+                </View>
+                {/* Sale event */}
+                {saleData?.soldAt && (
+                  <View style={s.activityRow}>
+                    <View
+                      style={[s.activityDot, { backgroundColor: C.gold }]}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.activityType}>Sold</Text>
+                      <Text style={s.activityDetail}>
+                        Purchased via MBC · {price} USD
+                      </Text>
+                    </View>
+                    <Text style={s.activityDate}>
+                      {new Date(saleData.soldAt).toLocaleDateString()}
+                    </Text>
+                  </View>
+                )}
+                {/* Claim event */}
+                {saleData?.claimed && saleData?.claimedAt && (
+                  <View style={s.activityRow}>
+                    <View
+                      style={[s.activityDot, { backgroundColor: C.green }]}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.activityType}>NFT Claimed</Text>
+                      <Text style={s.activityDetail}>
+                        Transferred to{" "}
+                        {saleData.buyerWallet
+                          ? short(saleData.buyerWallet)
+                          : "owner wallet"}
+                      </Text>
+                    </View>
+                    <Text style={s.activityDate}>
+                      {new Date(saleData.claimedAt).toLocaleDateString()}
+                    </Text>
+                  </View>
+                )}
+                {/* Unclaimed note */}
+                {!saleData?.claimed && (
+                  <View style={s.activityRow}>
+                    <View
+                      style={[s.activityDot, { backgroundColor: C.muted }]}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.activityType, { color: C.muted }]}>
+                        NFT Transfer Pending
+                      </Text>
+                      <Text style={s.activityDetail}>Awaiting buyer claim</Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+              <View style={s.rule} />
+            </>
+          )}
+
+          {/* ── Traits & Details ── */}
+          <Text style={s.sectionLbl}>Traits & Details</Text>
+          <View style={s.traitsBox}>
+            {TRAITS.map(([key, label]) => {
+              const val = data[key];
+              if (!val || val === "" || val === 0) return null;
+              return (
+                <View key={key} style={s.traitRow}>
+                  <Text style={s.traitKey}>{label}</Text>
+                  <Text style={s.traitVal}>{String(val)}</Text>
+                </View>
+              );
+            })}
+          </View>
+
+          {/* ── On-Chain Proof ── */}
+          <View style={s.rule} />
+          <Text style={s.sectionLbl}>On-Chain Proof</Text>
+          <View style={s.chainBox}>
+            {[
+              { k: "Contract", v: short(CONTRACT), mono: true },
+              { k: "Token ID", v: `#${tokenId}`, gold: true },
+              { k: "Standard", v: "Soroban NFT", mono: false },
+              { k: "Network", v: "Stellar · Testnet", gold: true },
+              {
+                k: "Owner",
+                v: data.owner ? short(data.owner) : "Admin",
+                mono: true,
+              },
+            ].map(({ k, v, gold, mono }) => (
+              <View key={k} style={s.chainRow}>
+                <Text style={s.chainKey}>{k}</Text>
+                <Text
+                  style={[
+                    s.chainVal,
+                    gold && { color: C.goldLt },
+                    mono && { fontFamily: "monospace" },
+                  ]}
+                >
+                  {v}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          <TouchableOpacity
+            style={s.explorerBtn}
+            activeOpacity={0.8}
+            onPress={() => {
+              const url = `${EXPLORER}/contract/${CONTRACT}`;
+              if (IS_WEB) window.open(url, "_blank");
+              else Linking.openURL(url);
+            }}
+          >
+            <Text style={s.explorerBtnTxt}>View on Stellar Explorer ↗</Text>
+          </TouchableOpacity>
+
+          <View style={{ height: 100 }} />
+        </View>
+      </Animated.ScrollView>
+
+      {/* ── Sticky bar ── */}
+      {pageState === "listed" && (
+        <View style={s.stickyBar}>
+          <SafeAreaView edges={["bottom"]}>
+            <View
+              style={[
+                s.stickyInner,
+                IS_WEB && {
+                  maxWidth: MAX_W,
+                  alignSelf: "center" as const,
+                  width: "100%",
+                },
+              ]}
+            >
+              <View style={{ flex: 1, marginRight: 16 }}>
+                <Text style={s.stickyName} numberOfLines={1}>
+                  {data.name}
+                </Text>
+                <Text style={s.stickyPrice}>{price} USD</Text>
+              </View>
+              <TouchableOpacity
+                style={[s.stickyBtn, buyDisabled && s.stickyBtnDisabled]}
+                onPress={buyNFT}
+                disabled={buyDisabled}
+                activeOpacity={0.85}
+              >
+                {buyStep === "checking" || buyStep === "redirecting" ? (
+                  <ActivityIndicator color={C.black} size="small" />
+                ) : (
+                  <Text style={s.stickyBtnTxt}>
+                    {buyStep === "unavailable" ? "Unavailable" : "Buy Now"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        </View>
+      )}
+
+      {pageState === "sold_unclaimed" && (
+        <View style={s.stickyBar}>
+          <SafeAreaView edges={["bottom"]}>
+            <View
+              style={[
+                s.stickyInner,
+                IS_WEB && {
+                  maxWidth: MAX_W,
+                  alignSelf: "center" as const,
+                  width: "100%",
+                },
+              ]}
+            >
+              <View style={{ flex: 1, marginRight: 16 }}>
+                <Text style={s.stickyName} numberOfLines={1}>
+                  {data.name}
+                </Text>
+                <Text style={[s.stickyPrice, { color: C.muted }]}>
+                  NFT Unclaimed
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={s.stickyBtnOffer}
+                onPress={() => setOfferVisible(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={s.stickyBtnOfferTxt}>Make Offer</Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        </View>
+      )}
+
+      {pageState === "sold_claimed" && (
+        <View style={s.stickyBar}>
+          <SafeAreaView edges={["bottom"]}>
+            <View
+              style={[
+                s.stickyInner,
+                IS_WEB && {
+                  maxWidth: MAX_W,
+                  alignSelf: "center" as const,
+                  width: "100%",
+                },
+              ]}
+            >
+              <View style={{ flex: 1, marginRight: 16 }}>
+                <Text style={s.stickyName} numberOfLines={1}>
+                  {data.name}
+                </Text>
+                <Text style={[s.stickyPrice, { color: C.green }]}>
+                  ✦ NFT Claimed
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={s.stickyBtnOffer}
+                onPress={() => setOfferVisible(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={s.stickyBtnOfferTxt}>Make Offer</Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        </View>
+      )}
+
+      {/* ── Make Offer Modal ── */}
+      <Modal
+        visible={offerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOfferVisible(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            <Text style={s.modalTitle}>Make an Offer</Text>
+            <Text style={s.modalSub}>
+              Offers are coming soon.{"\n"}Contact us to express interest in
+              this piece.
+            </Text>
+            <TouchableOpacity
+              style={s.modalBtn}
+              onPress={() => {
+                setOfferVisible(false);
+                Linking.openURL(
+                  `mailto:youngcompltd@gmail.com?subject=Offer for ${data.name} — Token #${tokenId}`,
+                );
+              }}
+            >
+              <Text style={s.modalBtnTxt}>Contact Us →</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setOfferVisible(false)}
+              style={{ marginTop: 12 }}
+            >
+              <Text style={s.modalClose}>Dismiss</Text>
+            </TouchableOpacity>
           </View>
         </View>
-
-        {/* ── FOOTER ── */}
-        <SafeAreaView edges={["bottom"]} style={{ backgroundColor: C.black }}>
-          <View style={[s.footer, { paddingHorizontal: sidePad }]}>
-            <Text style={s.footerLogo}>
-              Michael <Text style={s.footerLogoEm}>By Christian</Text>
-            </Text>
-            <View style={s.footerRule} />
-            <Text style={s.footerSub}>
-              Phygital Luxury Fashion · Stellar Blockchain · Est. 2026
-            </Text>
-            <Text style={s.footerHandle}>@michaelbychristian · @cinccity</Text>
-          </View>
-        </SafeAreaView>
-      </ScrollView>
+      </Modal>
     </View>
   );
 }
 
+// ── Styles ─────────────────────────────────────────────────────
+const IMG_H = IS_WEB ? Math.min(width * 0.6, 500) : width;
+
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.black },
-  navSafe: {
+  screen: {
+    flex: 1,
+    backgroundColor: C.black,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+  },
+  loadTxt: {
+    marginTop: 14,
+    fontSize: 9,
+    letterSpacing: 3,
+    textTransform: "uppercase",
+    color: C.muted,
+  },
+  errTitle: {
+    fontSize: 16,
+    color: C.cream,
+    fontWeight: "600",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  errSub: {
+    fontSize: 12,
+    color: C.muted,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  retryBtn: {
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+  },
+  retryTxt: {
+    fontSize: 9,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.gold,
+  },
+  backLink: { fontSize: 12, color: C.muted },
+  rarityNavLink: { fontSize: 11, color: C.gold, letterSpacing: 0.5 },
+
+  topBar: {
     backgroundColor: C.charcoal,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
   },
-  nav: { paddingVertical: 14 },
-  navInner: {
+  topBarInner: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
   },
-  navEye: {
+  backBtn: { width: 80 },
+  backTxt: { fontSize: 11, color: C.muted, letterSpacing: 0.5 },
+  topBarCenter: { flex: 1, alignItems: "center" },
+  topEye: {
     fontSize: 8,
     letterSpacing: 3,
     textTransform: "uppercase",
     color: C.gold,
-    marginBottom: 2,
   },
-  navLogo: {
-    fontFamily: "serif",
-    fontSize: 16,
-    fontWeight: "700",
-    color: C.cream,
+
+  imgWrap: {
+    width: "100%",
+    height: IMG_H,
+    backgroundColor: IS_WEB ? C.black : C.warm,
+    overflow: "hidden",
   },
-  navLogoEm: { fontStyle: "italic", fontWeight: "400", color: C.goldLt },
-  navLinks: {
-    flexDirection: "row",
-    gap: 20,
+  img: { width: "100%", height: "100%" },
+  imgPlaceholder: {
+    width: "100%",
+    height: "100%",
     alignItems: "center",
-    flexWrap: "wrap",
+    justifyContent: "center",
   },
-  navLink: {
-    fontSize: 9,
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
-    color: "rgba(245,239,224,0.65)",
+  imgInit: {
+    fontFamily: "serif",
+    fontSize: 80,
+    fontWeight: "900",
+    color: "rgba(184,150,62,0.1)",
   },
-  hamburger: { padding: 4, gap: 5, justifyContent: "center" },
-  hLine: { width: 22, height: 2, backgroundColor: C.cream, borderRadius: 1 },
-  hLineTop: { transform: [{ rotate: "45deg" }, { translateY: 7 }] },
-  hLineMid: { opacity: 0 },
-  hLineBot: { transform: [{ rotate: "-45deg" }, { translateY: -7 }] },
-  mobileMenu: {
-    backgroundColor: C.charcoal,
-    borderTopWidth: 1,
-    borderTopColor: C.border,
+  imgOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(12,11,9,0.15)",
   },
-  mobileMenuItem: {
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-  },
-  mobileMenuTxt: {
-    fontSize: 11,
-    letterSpacing: 2.5,
-    textTransform: "uppercase",
-    color: C.cream,
-  },
-  hero: {
-    width: "100%",
-    justifyContent: "flex-end",
-    overflow: "hidden",
-    backgroundColor: C.black,
-  },
-  heroSection: { width: "100%", backgroundColor: C.black, overflow: "hidden" },
-  heroFrame: {
-    width: "100%",
-    position: "relative",
-    justifyContent: "flex-end",
-    overflow: "hidden",
-    backgroundColor: C.black,
-  },
-  heroMedia: {
+
+  tokenBadge: {
     position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    overflow: "hidden",
-    zIndex: 0,
+    bottom: 14,
+    left: 16,
+    backgroundColor: "rgba(12,11,9,0.88)",
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  heroOverlay: {
+  tokenBadgeTxt: {
+    fontSize: 8,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.gold,
+  },
+  nfcBadge: {
     position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    zIndex: 1,
+    bottom: 14,
+    right: 16,
+    backgroundColor: "rgba(91,175,133,0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(91,175,133,0.5)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  heroContent: { paddingBottom: 44, zIndex: 2 },
-  heroVideo: { width: "100%", height: "100%" },
-  heroTextBlock: { maxWidth: 420 },
-  heroTextBlockWide: { marginLeft: 80 },
-  heroInner: {},
-  heroEye: {
-    fontSize: 9,
+  nfcBadgeTxt: {
+    fontSize: 8,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.green,
+  },
+  listedBadge: {
+    position: "absolute",
+    top: 14,
+    right: 16,
+    backgroundColor: "rgba(91,175,133,0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(91,175,133,0.5)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  listedBadgeTxt: {
+    fontSize: 7,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.green,
+  },
+  soldBadge: {
+    position: "absolute",
+    top: 14,
+    right: 16,
+    backgroundColor: "rgba(192,97,74,0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(192,97,74,0.5)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  soldBadgeTxt: {
+    fontSize: 7,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.red,
+  },
+  claimedBadge: {
+    position: "absolute",
+    top: 14,
+    right: 16,
+    backgroundColor: "rgba(91,175,133,0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(91,175,133,0.5)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  claimedBadgeTxt: {
+    fontSize: 7,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.green,
+  },
+
+  content: { backgroundColor: C.black, paddingHorizontal: 24, paddingTop: 28 },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 16,
+  },
+  eyebrow: {
+    fontSize: 8,
     letterSpacing: 3,
     textTransform: "uppercase",
     color: C.gold,
-    marginBottom: 14,
+    marginBottom: 8,
   },
-  heroTitle: {
+  pieceTitle: {
     fontFamily: "serif",
+    fontSize: 28,
     fontWeight: "900",
     color: C.cream,
-    letterSpacing: -1,
+    lineHeight: 30,
+    marginBottom: 6,
   },
-  heroSub: {
+  pieceSub: { fontSize: 11, color: C.muted, letterSpacing: 0.5 },
+  priceBox: { alignItems: "flex-end" },
+  priceVal: {
     fontFamily: "serif",
-    fontStyle: "italic",
-    fontWeight: "300",
+    fontSize: 28,
+    fontWeight: "700",
     color: C.goldLt,
-    letterSpacing: -1,
+  },
+  priceLbl: {
+    fontSize: 8,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.muted,
+    marginTop: 2,
+  },
+  lastSaleLbl: {
+    fontSize: 7,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.muted,
+    marginBottom: 2,
+  },
+  rarityRow: {
+    flexDirection: "row",
+    borderWidth: 1,
+    borderColor: C.border,
+    marginBottom: 20,
+    overflow: "hidden",
+  },
+  rarityItem: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 10,
+    borderRightWidth: 1,
+    borderRightColor: C.border,
+    backgroundColor: C.charcoal,
+  },
+  rarityLabel: {
+    fontSize: 7,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: C.muted,
     marginBottom: 4,
   },
-  heroTagline: {
-    fontFamily: "serif",
-    fontStyle: "italic",
-    fontSize: 15,
-    color: "rgba(245,239,224,0.58)",
-    marginTop: 14,
-    lineHeight: 23,
-    maxWidth: 380,
+  rarityVal: { fontSize: 13, color: C.goldLt, fontWeight: "700" },
+  rarityOf: { fontSize: 9, color: C.muted, fontWeight: "400" },
+  gainRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
   },
-  ctaRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 24 },
-  btnWhite: {
-    backgroundColor: C.cream,
-    paddingHorizontal: 24,
-    paddingVertical: 13,
-  },
-  btnWhiteTxt: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 2,
+  gainLabel: {
+    fontSize: 9,
+    letterSpacing: 1.5,
     textTransform: "uppercase",
-    color: C.black,
+    color: C.muted,
   },
-  btnGhost: {
-    borderWidth: 1,
-    borderColor: "rgba(245,239,224,0.38)",
-    paddingHorizontal: 24,
-    paddingVertical: 13,
-  },
-  btnGhostTxt: {
-    fontSize: 10,
-    fontWeight: "500",
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: C.cream,
-  },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 16 },
+  gainVal: { fontSize: 13, color: C.green, fontWeight: "700" },
+
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 24 },
   chip: {
-    backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
-    borderColor: "rgba(245,239,224,0.14)",
-    paddingHorizontal: 8,
+    borderColor: C.border,
+    paddingHorizontal: 10,
     paddingVertical: 4,
   },
   chipTxt: {
     fontSize: 7,
-    letterSpacing: 1.5,
+    letterSpacing: 2,
     textTransform: "uppercase",
-    color: "rgba(245,239,224,0.48)",
+    color: C.muted,
   },
-  section: {
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-    backgroundColor: C.black,
-    paddingVertical: 48,
+
+  cartAddBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: C.gold,
+    padding: 16,
+    alignItems: "center",
   },
-  sectionAlt: { backgroundColor: C.charcoal },
-  eyebrow: {
-    fontSize: 9,
-    letterSpacing: 4,
-    textTransform: "uppercase",
-    color: C.gold,
-    marginBottom: 12,
-  },
-  h2: {
-    fontFamily: "serif",
-    fontWeight: "900",
-    color: C.cream,
-    marginBottom: 16,
-  },
-  h2Em: { fontStyle: "italic", fontWeight: "300", color: C.goldLt },
-  bodyText: {
-    fontSize: 14,
-    color: "#A09880",
-    lineHeight: 24,
-    marginBottom: 24,
-  },
-  point: {
-    flexDirection: "row",
-    paddingTop: 20,
-    paddingBottom: 20,
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-    gap: 18,
-  },
-  pointNum: {
+  cartAddBtnActive: { backgroundColor: C.gold },
+  cartAddBtnTxt: {
     fontSize: 10,
     fontWeight: "700",
-    color: C.gold,
-    letterSpacing: 2,
-    width: 26,
-    marginTop: 2,
-  },
-  pointRight: { flex: 1 },
-  pointTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: C.cream,
-    marginBottom: 5,
-    letterSpacing: 0.2,
-  },
-  pointBody: { fontSize: 13, color: "#A09880", lineHeight: 20 },
-  statsSection: {
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-    backgroundColor: C.charcoal,
-    paddingVertical: 48,
-  },
-  statRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    paddingVertical: 22,
-    gap: 16,
-  },
-  statDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.06)",
-  },
-  statNum: {
-    fontFamily: "serif",
-    fontSize: 48,
-    fontWeight: "900",
-    color: C.cream,
-    lineHeight: 48,
-    letterSpacing: -1.5,
-  },
-  statLbl: {
-    fontSize: 10,
     letterSpacing: 2,
     textTransform: "uppercase",
-    color: "rgba(255,255,255,0.35)",
-    flex: 1,
-    flexWrap: "wrap",
+    color: C.gold,
   },
-  collSection: {
+  keepShoppingBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 16,
+    alignItems: "center",
+  },
+  keepShoppingBtnTxt: {
+    fontSize: 10,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: C.muted,
+  },
+  buyBtn: {
+    backgroundColor: C.gold,
+    padding: 18,
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  buyBtnDisabled: { backgroundColor: C.muted, opacity: 0.7 },
+  buyBtnTxt: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 2.5,
+    textTransform: "uppercase",
+    color: C.black,
+  },
+  buyErrorBox: {
+    backgroundColor: "rgba(192,97,74,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(192,97,74,0.35)",
+    padding: 14,
+    marginBottom: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  buyErrorBoxWarn: {
+    backgroundColor: "rgba(184,150,62,0.08)",
+    borderColor: C.border,
+  },
+  buyErrorTxt: { fontSize: 12, color: C.red, flex: 1, lineHeight: 18 },
+  buyErrorReset: { fontSize: 10, color: C.muted, marginLeft: 12 },
+  buyNote: {
+    fontSize: 10,
+    color: C.muted,
+    textAlign: "center",
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+
+  claimBox: {
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 20,
+    marginBottom: 10,
+    backgroundColor: C.charcoal,
+  },
+  claimTitle: {
+    fontSize: 11,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.gold,
+    marginBottom: 8,
+    fontWeight: "600",
+  },
+  claimSub: { fontSize: 12, color: C.muted, lineHeight: 18, marginBottom: 16 },
+  claimInput: {
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.warm,
+    color: C.cream,
+    fontSize: 13,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
+  },
+  claimAutoFill: {
+    backgroundColor: C.warm,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 14,
+    marginBottom: 12,
+  },
+  claimAutoFillLabel: {
+    fontSize: 8,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.gold,
+    marginBottom: 4,
+  },
+  claimAutoFillVal: { fontSize: 13, color: C.cream, marginBottom: 4 },
+  claimAutoFillWallet: {
+    fontSize: 10,
+    color: C.muted,
+    fontFamily: "monospace",
+  },
+  claimBtn: {
+    backgroundColor: C.gold,
+    padding: 16,
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  claimError: { fontSize: 12, color: C.red, marginBottom: 10 },
+  claimSuccess: {
+    backgroundColor: "rgba(91,175,133,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(91,175,133,0.4)",
+    padding: 16,
+  },
+  claimSuccessTitle: {
+    fontSize: 13,
+    color: C.green,
+    fontWeight: "600",
+    marginBottom: 6,
+  },
+  claimSuccessSub: { fontSize: 12, color: C.muted, lineHeight: 18 },
+  txLink: { fontSize: 11, color: C.gold, marginTop: 8 },
+
+  ownerBox: {
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.charcoal,
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  ownerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  ownerLabel: {
+    fontSize: 9,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: C.muted,
+  },
+  ownerVal: { fontSize: 12, color: C.cream, fontFamily: "monospace" },
+
+  offerBtnRow: {
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 14,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  offerBtnTxt: {
+    fontSize: 9,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.muted,
+  },
+
+  rule: { height: 1, backgroundColor: C.border, marginVertical: 28 },
+  sectionLbl: {
+    fontSize: 9,
+    letterSpacing: 3.5,
+    textTransform: "uppercase",
+    color: C.gold,
+    marginBottom: 16,
+    fontWeight: "600",
+  },
+
+  activityBox: {
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: "hidden",
+    marginBottom: 4,
+  },
+  activityRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    backgroundColor: C.charcoal,
+    gap: 12,
+  },
+  activityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: C.cream,
+    marginTop: 4,
+  },
+  activityType: {
+    fontSize: 11,
+    color: C.cream,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  activityDetail: { fontSize: 10, color: C.muted, letterSpacing: 0.3 },
+  activityDate: { fontSize: 10, color: C.muted },
+
+  traitsBox: {
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: "hidden",
+    marginBottom: 4,
+  },
+  traitRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    backgroundColor: C.charcoal,
+  },
+  traitKey: {
+    fontSize: 9,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: C.muted,
+    flex: 1,
+  },
+  traitVal: {
+    fontSize: 12,
+    color: C.cream,
+    fontWeight: "500",
+    flex: 1,
+    textAlign: "right",
+  },
+
+  chainBox: {
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: "hidden",
+    backgroundColor: C.charcoal,
+    marginBottom: 16,
+  },
+  chainRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  chainKey: {
+    fontSize: 9,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: C.muted,
+  },
+  chainVal: { fontSize: 11, color: C.cream },
+  explorerBtn: {
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 14,
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  explorerBtnTxt: {
+    fontSize: 9,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.muted,
+  },
+
+  stickyBar: {
+    backgroundColor: C.charcoal,
     borderTopWidth: 1,
     borderTopColor: C.border,
-    backgroundColor: C.black,
   },
-  btnGold: {
+  stickyInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  stickyName: { fontSize: 13, fontWeight: "600", color: C.cream },
+  stickyPrice: { fontSize: 11, color: C.goldLt, marginTop: 2 },
+  stickyBtn: {
     backgroundColor: C.gold,
-    paddingHorizontal: 24,
+    paddingHorizontal: 28,
     paddingVertical: 14,
-    alignSelf: "flex-start",
   },
-  btnGoldTxt: {
-    fontSize: 10,
+  stickyBtnDisabled: { backgroundColor: C.muted },
+  stickyBtnTxt: {
+    fontSize: 9,
     fontWeight: "700",
     letterSpacing: 2,
     textTransform: "uppercase",
     color: C.black,
   },
-  bagGrid: { gap: 2 },
-  bagRow: { flexDirection: "row", gap: 2, marginBottom: 2 },
-  bagCard: {
+  stickyBtnOffer: {
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  stickyBtnOfferTxt: {
+    fontSize: 9,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.muted,
+  },
+
+  modalOverlay: {
     flex: 1,
+    backgroundColor: "rgba(12,11,9,0.92)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalCard: {
     backgroundColor: C.charcoal,
     borderWidth: 1,
     borderColor: C.border,
-    overflow: "hidden",
-  },
-  bagImgWrap: {
-    aspectRatio: 1,
-    backgroundColor: "#0C0B09",
+    padding: 32,
+    width: "100%",
+    maxWidth: 400,
     alignItems: "center",
-    justifyContent: "center",
-    padding: 8,
   },
-  bagImg: { width: "100%", height: "100%" },
-  bagCardBody: { padding: 10 },
-  bagName: {
+  modalTitle: {
     fontFamily: "serif",
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 24,
+    fontWeight: "900",
     color: C.cream,
-    marginBottom: 3,
+    marginBottom: 12,
   },
-  bagColor: {
-    fontSize: 7,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: C.muted,
-  },
-  phygitalLead: {
-    fontSize: 15,
-    color: "#A09880",
-    lineHeight: 26,
-    marginBottom: 28,
-    fontStyle: "italic",
-    fontFamily: "serif",
-  },
-  phCard: {
-    flexDirection: "row",
-    gap: 18,
-    paddingTop: 22,
-    paddingBottom: 22,
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-  },
-  phCardNum: {
-    width: 36,
-    height: 36,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-    marginTop: 2,
-  },
-  phCardNumTxt: { fontSize: 10, fontWeight: "700", letterSpacing: 1 },
-  phCardBody: { flex: 1 },
-  phCardTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: C.cream,
-    marginBottom: 7,
-    lineHeight: 21,
-  },
-  phCardText: { fontSize: 13, color: "#A09880", lineHeight: 21 },
-  phQuote: {
-    marginTop: 36,
-    marginBottom: 32,
-    paddingLeft: 18,
-    borderLeftWidth: 2,
-    borderLeftColor: C.gold,
-  },
-  phQuoteMark: {
-    fontFamily: "serif",
-    fontSize: 44,
-    color: C.gold,
-    lineHeight: 36,
-    marginBottom: 4,
-  },
-  phQuoteText: {
-    fontFamily: "serif",
-    fontStyle: "italic",
-    fontSize: 17,
-    color: C.cream,
-    lineHeight: 27,
-    marginBottom: 10,
-  },
-  phQuoteAttr: {
-    fontSize: 9,
-    letterSpacing: 3,
-    textTransform: "uppercase",
-    color: C.muted,
-  },
-  step: {
-    flexDirection: "row",
-    paddingTop: 20,
-    paddingBottom: 20,
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-    gap: 16,
-  },
-  stepNumBox: {
-    width: 34,
-    height: 34,
-    borderWidth: 1,
-    borderColor: C.border,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  stepNumTxt: { fontSize: 12, fontWeight: "700", color: C.gold },
-  stepRight: { flex: 1 },
-  stepTitleRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    marginBottom: 6,
-    flexWrap: "wrap",
-  },
-  stepTitle: {
+  modalSub: {
     fontSize: 13,
-    fontWeight: "600",
-    color: C.cream,
-    flex: 1,
-    lineHeight: 19,
-  },
-  badge: {
-    backgroundColor: "rgba(91,175,133,0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(91,175,133,0.35)",
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    flexShrink: 0,
-  },
-  badgeTxt: {
-    fontSize: 7,
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
-    color: C.green,
-  },
-  stepBody: { fontSize: 13, color: "#A09880", lineHeight: 20 },
-  callout: {
-    marginTop: 32,
-    backgroundColor: C.black,
-    borderWidth: 1,
-    borderColor: C.border,
-    padding: 22,
-  },
-  calloutTitle: {
-    fontFamily: "serif",
-    fontSize: 20,
-    fontWeight: "700",
-    color: C.cream,
-    marginBottom: 16,
+    color: C.muted,
     textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
   },
-  btnBorder: {
-    borderWidth: 1,
-    borderColor: C.border,
-    paddingVertical: 13,
+  modalBtn: {
+    backgroundColor: C.gold,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    width: "100%",
     alignItems: "center",
   },
-  btnBorderTxt: {
-    fontSize: 10,
+  modalBtnTxt: {
+    fontSize: 9,
     fontWeight: "700",
     letterSpacing: 2,
     textTransform: "uppercase",
-    color: C.cream,
+    color: C.black,
   },
-  footer: {
-    paddingVertical: 44,
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-  },
-  footerLogo: {
-    fontFamily: "serif",
-    fontSize: 20,
-    fontWeight: "700",
-    color: C.cream,
-    marginBottom: 12,
-  },
-  footerLogoEm: { fontStyle: "italic", fontWeight: "400", color: C.goldLt },
-  footerRule: {
-    height: 1,
-    width: 40,
-    backgroundColor: C.border,
-    marginBottom: 12,
-  },
-  footerSub: {
-    fontSize: 10,
-    color: C.muted,
-    letterSpacing: 1,
-    textAlign: "center",
-    marginBottom: 6,
-    lineHeight: 17,
-  },
-  footerHandle: { fontSize: 10, color: C.muted },
+  modalClose: { fontSize: 11, color: C.muted, letterSpacing: 1 },
 });
