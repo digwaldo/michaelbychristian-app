@@ -259,7 +259,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return cart.some((i) => i.token_id === tokenId);
   }
 
-  const cartTotal = cart.reduce((sum, i) => sum + i.price_usdc, 0);
+  const cartTotal = cart.reduce((sum, i) => sum + i.price, 0);
 
   return (
     <AuthContext.Provider

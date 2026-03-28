@@ -81,13 +81,24 @@ interface NFTItem {
   tokenId: number;
   name: string;
   image: string | null;
-  price_usdc: number;
+  price: number;
   listed: boolean;
   sold: boolean;
   owner: string | null;
   silhouette: string;
   model: string;
   edition_type: string;
+  edition_run: string;
+  edition_number: string;
+  edition_total: string;
+  designer: string;
+  origin_country: string;
+  manufacture_country: string;
+  closure_type: string;
+  strap_type: string;
+  finishing: string;
+  capacity: string;
+  dimensions: string;
   primary_color: string;
   secondary_color: string;
   primary_texture: string;
@@ -133,6 +144,13 @@ interface Filters {
   archive_status: string[];
   tailored_year: string[];
   design_year: string[];
+  closure_type: string[];
+  strap_type: string[];
+  finishing: string[];
+  capacity: string[];
+  origin_country: string[];
+  manufacture_country: string[];
+  designer: string[];
 }
 
 const emptyFilters: Filters = {
@@ -156,6 +174,13 @@ const emptyFilters: Filters = {
   archive_status: [],
   tailored_year: [],
   design_year: [],
+  closure_type: [],
+  strap_type: [],
+  finishing: [],
+  capacity: [],
+  origin_country: [],
+  manufacture_country: [],
+  designer: [],
 };
 
 const traitKeys: (keyof Filters)[] = [
@@ -179,23 +204,33 @@ const traitKeys: (keyof Filters)[] = [
 ];
 
 const rarityTraitKeys: (keyof NFTItem)[] = [
-  "silhouette",
-  "model",
-  "edition_type",
-  "primary_color",
-  "secondary_color",
+  // Tier 1 — Physical materials
   "primary_texture",
   "secondary_texture",
-  "textured_pattern",
   "hardware",
+  "finishing",
+  // Tier 2 — Design identity
+  "silhouette",
+  "model",
+  "primary_color",
+  "secondary_color",
+  "closure_type",
+  "strap_type",
+  "capacity",
+  // Tier 3 — Context & provenance
+  "textured_pattern",
   "interior_lining",
   "authentication",
   "collection",
   "collaboration",
+  "origin_country",
+  "manufacture_country",
   "design_status",
   "archive_status",
   "tailored_year",
   "design_year",
+  // Legacy
+  "edition_type",
 ];
 
 function getPresentTraitKeys(item: NFTItem) {
@@ -223,16 +258,21 @@ const TRAIT_WEIGHTS: Record<string, number> = {
   primary_texture: 3,
   secondary_texture: 3,
   hardware: 3,
-  // Tier 2 — Design DNA (2x)
+  finishing: 3,
+  // Tier 2 — Design identity (2x)
   silhouette: 2,
   model: 2,
-  edition_type: 2,
   primary_color: 2,
   secondary_color: 2,
+  closure_type: 2,
+  strap_type: 2,
+  capacity: 2,
+  // Legacy
+  edition_type: 2,
   // Tier 3 — Context & provenance (1x — default)
-  // textured_pattern, interior_lining, authentication,
-  // collection, collaboration, design_status, archive_status,
-  // tailored_year, design_year
+  // textured_pattern, interior_lining, authentication, collection,
+  // collaboration, origin_country, manufacture_country,
+  // design_status, archive_status, tailored_year, design_year
 };
 
 // NFC bonus — flat points added for bags with embedded NFC chip
@@ -363,34 +403,52 @@ export default function CollectionScreen() {
             const isSold = !ownedByAdmin || soldInKV;
             const isListed = raw?.listed !== false && ownedByAdmin && !soldInKV;
 
+            function f(key: string) {
+              return t[key] || raw?.[key] || "";
+            }
+
             items.push({
               tokenId: i,
               name: raw?.name || `MBC Token #${i}`,
               image: resolveImg(raw?.image),
-              price_usdc: raw?.price_usdc ? Number(raw.price_usdc) : 0,
+              price: raw?.price ? Number(raw.price) : 0,
               listed: isListed,
               sold: isSold,
               owner,
-              silhouette: t.silhouette || raw?.silhouette || "",
-              model: t.model || raw?.model || "",
-              edition_type: t.edition_type || raw?.edition_type || "",
-              primary_color: t.primary_color || raw?.primary_color || "",
-              secondary_color: t.secondary_color || raw?.secondary_color || "",
-              primary_texture: t.primary_texture || raw?.primary_texture || "",
-              secondary_texture:
-                t.secondary_texture || raw?.secondary_texture || "",
-              textured_pattern:
-                t.textured_pattern || raw?.textured_pattern || "",
-              hardware: t.hardware || raw?.hardware || "",
-              interior_lining: t.interior_lining || raw?.interior_lining || "",
-              authentication: t.authentication || raw?.authentication || "",
-              nfc_chip_id: t.nfc_chip_id || raw?.nfc_chip_id || "",
-              collection: t.collection || raw?.collection || "",
-              collaboration: t.collaboration || raw?.collaboration || "",
-              design_status: t.design_status || raw?.design_status || "",
-              archive_status: t.archive_status || raw?.archive_status || "",
-              tailored_year: t.tailored_year || raw?.tailored_year || "",
-              design_year: t.design_year || raw?.design_year || "",
+              // Identity
+              model: f("model"),
+              designer: f("designer"),
+              origin_country: f("origin_country"),
+              manufacture_country: f("manufacture_country"),
+              // Edition
+              edition_type: f("edition_type"),
+              edition_run: f("edition_run"),
+              edition_number: f("edition_number"),
+              edition_total: f("edition_total"),
+              collection: f("collection"),
+              collaboration: f("collaboration"),
+              tailored_year: f("tailored_year"),
+              design_year: f("design_year"),
+              // Silhouette & structure
+              silhouette: f("silhouette"),
+              closure_type: f("closure_type"),
+              strap_type: f("strap_type"),
+              capacity: f("capacity"),
+              dimensions: f("dimensions"),
+              finishing: f("finishing"),
+              // Materials
+              primary_color: f("primary_color"),
+              secondary_color: f("secondary_color"),
+              primary_texture: f("primary_texture"),
+              secondary_texture: f("secondary_texture"),
+              textured_pattern: f("textured_pattern"),
+              hardware: f("hardware"),
+              interior_lining: f("interior_lining"),
+              // Status
+              authentication: f("authentication"),
+              nfc_chip_id: f("nfc_chip_id"),
+              design_status: f("design_status"),
+              archive_status: f("archive_status"),
               rarity_score: 0,
               rarity_rank: 0,
               rarity_label: "",
@@ -457,7 +515,7 @@ export default function CollectionScreen() {
       r = r.filter((n) => n.listed !== true);
     if (f.price.length) {
       r = r.filter((n) => {
-        const price = n.price_usdc / 100;
+        const price = n.price / 100;
         return f.price.some((bucket) => {
           if (bucket === "under200") return price < 200;
           if (bucket === "200to300") return price >= 200 && price <= 300;
@@ -479,8 +537,8 @@ export default function CollectionScreen() {
         }),
       );
     }
-    if (s === "price_asc") r.sort((a, b) => a.price_usdc - b.price_usdc);
-    if (s === "price_desc") r.sort((a, b) => b.price_usdc - a.price_usdc);
+    if (s === "price_asc") r.sort((a, b) => a.price - b.price);
+    if (s === "price_desc") r.sort((a, b) => b.price - a.price);
     if (s === "name_asc") r.sort((a, b) => a.name.localeCompare(b.name));
     if (s === "newest") r.sort((a, b) => b.tokenId - a.tokenId);
     if (s === "rarity") r.sort((a, b) => a.rarity_rank - b.rarity_rank);
@@ -669,7 +727,7 @@ export default function CollectionScreen() {
               <Text style={s.inCartLabel}>✦ In Cart</Text>
             ) : (
               <>
-                <Text style={s.cardPrice}>{formatPrice(item.price_usdc)}</Text>
+                <Text style={s.cardPrice}>{formatPrice(item.price)}</Text>
                 <Text style={s.cardCurrency}>USD</Text>
               </>
             )}
@@ -705,7 +763,7 @@ export default function CollectionScreen() {
                   addToCart({
                     token_id: item.tokenId,
                     bag_name: item.name,
-                    price_usdc: item.price_usdc,
+                    price: item.price,
                     image: item.image,
                   })
                 }

@@ -1,6 +1,6 @@
-// app/piece/[id].tsx
-// Reads bag data from Stellar + sale/claim state from KV
-// States: listed (buy now) | sold+unclaimed (claim NFT) | sold+claimed (ownership view)
+// app/piece/[id].tsx — NFT Detail + Direct Stripe Checkout
+// Reads token data directly from Stellar contract
+// Calls /api/create-checkout directly — same as the HTML buyNFT() function
 
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -10,19 +10,14 @@ import {
   Dimensions,
   Image,
   Linking,
-  Modal,
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { CartIcon } from "../../components/CartIcon";
-import { useAuth } from "../../context/AuthContext";
 import {
-  ADMIN_WALLET,
   BACKEND,
   C,
   CONTRACT,
@@ -35,7 +30,7 @@ const { width } = Dimensions.get("window");
 const IS_WEB = Platform.OS === "web";
 const MAX_W = IS_WEB ? 760 : undefined;
 
-// ── Stellar read ──────────────────────────────────────────────
+// ── Direct Stellar read ───────────────────────────────────────
 async function loadTokenFromStellar(tokenId: number) {
   const Sdk = await import("@stellar/stellar-sdk" as any);
   const server = new Sdk.rpc.Server(RPC_URL);
@@ -57,64 +52,62 @@ async function loadTokenFromStellar(tokenId: number) {
     return Sdk.scValToNative(sim.result.retval);
   }
 
-  const tokenArg = Sdk.nativeToScVal(tokenId, { type: "u64" });
-
-  const [raw, ownerRaw] = await Promise.all([
-    simulate("full_token_data", [tokenArg]),
-    simulate("owner_of", [tokenArg]).catch(() => null),
+  const [raw, owner] = await Promise.all([
+    simulate("token_data", [Sdk.nativeToScVal(tokenId, { type: "u64" })]),
+    simulate("owner_of", [Sdk.nativeToScVal(tokenId, { type: "u64" })]).catch(
+      () => null,
+    ),
   ]);
 
   const t = raw.traits || {};
-  const owner = ownerRaw ? String(ownerRaw).trim() : null;
-  const ownedByAdmin =
-    !owner || owner.toUpperCase() === ADMIN_WALLET.toUpperCase();
-
-  // Build activity from on-chain data
-  const activity = [];
-  if (raw.minted_at || raw.tailored_year) {
-    activity.push({
-      type: "Minted",
-      date:
-        raw.minted_at || `${raw.tailored_year || raw.design_year || "2026"}`,
-      detail: "Token created on Stellar",
-    });
+  function f(key: string) {
+    return t[key] || raw[key] || "";
   }
-  if (!ownedByAdmin && owner) {
-    activity.push({
-      type: "Transferred",
-      date: raw.transferred_at || "Recent",
-      detail: `To ${owner.slice(0, 8)}...${owner.slice(-6)}`,
-    });
-  }
-
   return {
-    name: raw.name || `MBC Token #${tokenId}`,
-    image: raw.image || "",
-    price_usdc: raw.price_usdc ? Number(raw.price_usdc) : 0,
-    listed: raw.listed !== false,
-    owner,
-    ownedByAdmin,
-    silhouette: t.silhouette || raw.silhouette || "",
-    model: t.model || raw.model || "",
-    edition_type: t.edition_type || raw.edition_type || "",
-    primary_color: t.primary_color || raw.primary_color || "",
-    secondary_color: t.secondary_color || raw.secondary_color || "",
-    primary_texture: t.primary_texture || raw.primary_texture || "",
-    secondary_texture: t.secondary_texture || raw.secondary_texture || "",
-    textured_pattern: t.textured_pattern || raw.textured_pattern || "",
-    hardware: t.hardware || raw.hardware || "",
-    interior_lining: t.interior_lining || raw.interior_lining || "",
-    dimensions: t.dimensions || raw.dimensions || "",
-    authentication: t.authentication || raw.authentication || "",
-    serial_number: t.serial_number || raw.serial_number || "",
-    nfc_chip_id: t.nfc_chip_id || raw.nfc_chip_id || "",
-    collection: t.collection || raw.collection || "",
-    collaboration: t.collaboration || raw.collaboration || "",
-    design_status: t.design_status || raw.design_status || "",
-    archive_status: t.archive_status || raw.archive_status || "",
-    tailored_year: Number(t.tailored_year || raw.tailored_year || 0),
-    design_year: Number(t.design_year || raw.design_year || 0),
-    activity,
+    data: {
+      // Identity
+      name: raw.name || `MBC Token #${tokenId}`,
+      model: f("model"),
+      designer: f("designer"),
+      image: raw.image || "",
+      price: raw.price ? Number(raw.price) : 0,
+      listed: raw.listed !== false,
+      // Edition
+      edition_run: f("edition_run"),
+      edition_number: f("edition_number"),
+      edition_total: f("edition_total"),
+      serial_number: f("serial_number"),
+      collection: f("collection"),
+      collaboration: f("collaboration"),
+      tailored_year: f("tailored_year"),
+      design_year: f("design_year"),
+      // Silhouette & structure
+      silhouette: f("silhouette"),
+      closure_type: f("closure_type"),
+      strap_type: f("strap_type"),
+      capacity: f("capacity"),
+      dimensions: f("dimensions"),
+      // Materials
+      primary_color: f("primary_color"),
+      secondary_color: f("secondary_color"),
+      primary_texture: f("primary_texture"),
+      secondary_texture: f("secondary_texture"),
+      textured_pattern: f("textured_pattern"),
+      hardware: f("hardware"),
+      interior_lining: f("interior_lining"),
+      finishing: f("finishing"),
+      // Provenance
+      origin_country: f("origin_country"),
+      manufacture_country: f("manufacture_country"),
+      authentication: f("authentication"),
+      // Legacy / removed fields (kept for backwards compat with old tokens)
+      edition_type: f("edition_type"),
+      nfc_chip_id: f("nfc_chip_id"),
+      // Status
+      design_status: f("design_status"),
+      archive_status: f("archive_status"),
+    },
+    owner: owner || null,
   };
 }
 
@@ -125,68 +118,80 @@ function resolveImg(img: string): string {
   return img;
 }
 
-const TRAITS: [string, string][] = [
-  ["silhouette", "Silhouette"],
-  ["model", "Model"],
-  ["edition_type", "Edition"],
-  ["primary_color", "Primary Color"],
-  ["secondary_color", "Secondary Color"],
-  ["primary_texture", "Primary Texture"],
-  ["secondary_texture", "Secondary Texture"],
-  ["textured_pattern", "Pattern"],
-  ["hardware", "Hardware"],
-  ["interior_lining", "Interior Lining"],
-  ["dimensions", "Dimensions"],
-  ["authentication", "Authentication"],
-  ["serial_number", "Serial Number"],
-  ["nfc_chip_id", "NFC Chip ID"],
-  ["collection", "Collection"],
-  ["collaboration", "Collaboration"],
-  ["design_status", "Design Status"],
-  ["archive_status", "Archive Status"],
-  ["tailored_year", "Tailored Year"],
-  ["design_year", "Design Year"],
+// Grouped trait sections for display
+const TRAIT_GROUPS: { label: string; traits: [string, string][] }[] = [
+  {
+    label: "Identity",
+    traits: [
+      ["model", "Model / Silhouette Line"],
+      ["designer", "Designer"],
+      ["serial_number", "Serial Number"],
+      ["collection", "Collection"],
+      ["collaboration", "Collaboration"],
+      ["tailored_year", "Year Tailored"],
+      ["design_year", "Year Designed"],
+    ],
+  },
+  {
+    label: "Edition",
+    traits: [
+      ["edition_run", "Production Run"],
+      ["edition_number", "Edition Number"],
+      ["edition_total", "Edition Total"],
+    ],
+  },
+  {
+    label: "Construction",
+    traits: [
+      ["silhouette", "Silhouette"],
+      ["closure_type", "Closure"],
+      ["strap_type", "Strap"],
+      ["capacity", "Capacity"],
+      ["dimensions", "Dimensions"],
+      ["finishing", "Finishing"],
+    ],
+  },
+  {
+    label: "Materials",
+    traits: [
+      ["primary_texture", "Primary Texture"],
+      ["secondary_texture", "Secondary Texture"],
+      ["primary_color", "Primary Color"],
+      ["secondary_color", "Secondary Color"],
+      ["textured_pattern", "Pattern"],
+      ["hardware", "Hardware"],
+      ["interior_lining", "Interior Lining"],
+    ],
+  },
+  {
+    label: "Provenance",
+    traits: [
+      ["origin_country", "Designed In"],
+      ["manufacture_country", "Made In"],
+      ["authentication", "Authentication"],
+      ["design_status", "Status"],
+      ["archive_status", "Archive"],
+    ],
+  },
 ];
 
-type BuyStep = "idle" | "checking" | "redirecting" | "unavailable" | "error";
-type ClaimStep = "idle" | "submitting" | "success" | "error";
-type PageState =
-  | "loading"
-  | "listed"
-  | "sold_unclaimed"
-  | "sold_claimed"
-  | "error";
+// Flat list for backwards compat
+const TRAITS: [string, string][] = TRAIT_GROUPS.flatMap((g) => g.traits);
 
+type BuyStep = "idle" | "checking" | "redirecting" | "unavailable" | "error";
+
+// ── Component ─────────────────────────────────────────────────
 export default function PieceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const tokenId = Number(id);
-  const { session, addToCart, isInCart, profile, cart } = useAuth();
 
   const [data, setData] = useState<any | null>(null);
-  const [pageState, setPageState] = useState<PageState>("loading");
-  const [saleData, setSaleData] = useState<any | null>(null);
+  const [owner, setOwner] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imgErr, setImgErr] = useState(false);
-
-  // Buy state
   const [buyStep, setBuyStep] = useState<BuyStep>("idle");
   const [buyError, setBuyError] = useState("");
-
-  // Claim state
-  const [claimStep, setClaimStep] = useState<ClaimStep>("idle");
-  const [claimEmail, setClaimEmail] = useState("");
-  const [claimWallet, setClaimWallet] = useState("");
-  const [claimResult, setClaimResult] = useState<any | null>(null);
-  const [claimError, setClaimError] = useState("");
-
-  // Offer modal
-  const [offerVisible, setOfferVisible] = useState(false);
-
-  // XLM gain for sold items
-  const [gainPercent, setGainPercent] = useState<number | null>(null);
-
-  // Rarity from KV
-  const [rarityData, setRarityData] = useState<any | null>(null);
 
   const fadeIn = useRef(new Animated.Value(0)).current;
 
@@ -194,62 +199,13 @@ export default function PieceScreen() {
     load();
   }, [tokenId]);
 
-  // Auto-fill email + wallet if logged in
-  useEffect(() => {
-    if (session?.user?.email && !claimEmail) {
-      setClaimEmail(session.user.email);
-    }
-    if (profile?.stellar_wallet_public && !claimWallet) {
-      setClaimWallet(profile.stellar_wallet_public);
-    }
-  }, [session, profile]);
-
   async function load() {
-    setPageState("loading");
+    setLoading(true);
     setError(null);
     try {
-      const [tokenData, soldRes, gainsRes, rarityRes] = await Promise.all([
-        loadTokenFromStellar(tokenId),
-        fetch(`${BACKEND}/api/sold?type=check&token_id=${tokenId}`)
-          .then((r) => r.json())
-          .catch(() => ({ sold: false })),
-        fetch(`${BACKEND}/api/sold?type=gains`)
-          .then((r) => r.json())
-          .catch(() => null),
-        fetch(`${BACKEND}/api/rarity?type=token&token_id=${tokenId}`)
-          .then((r) => r.json())
-          .catch(() => null),
-      ]);
-      if (gainsRes?.gains?.[tokenId]) setGainPercent(gainsRes.gains[tokenId]);
-      if (rarityRes?.found) setRarityData(rarityRes);
-
-      setData(tokenData);
-      setSaleData(soldRes);
-
-      if (!soldRes.sold) {
-        setPageState("listed");
-      } else {
-        // Cross-reference on-chain owner with KV claimed state.
-        // If owner is not the admin wallet the NFT has already been transferred.
-        const onChainClaimed =
-          !!tokenData.owner &&
-          tokenData.owner.toUpperCase() !== ADMIN_WALLET.toUpperCase();
-
-        if (soldRes.claimed || onChainClaimed) {
-          // Sync KV if it still shows unclaimed but chain shows transferred
-          if (!soldRes.claimed && onChainClaimed) {
-            setSaleData((prev: any) => ({
-              ...prev,
-              claimed: true,
-              buyerWallet: tokenData.owner,
-            }));
-          }
-          setPageState("sold_claimed");
-        } else {
-          setPageState("sold_unclaimed");
-        }
-      }
-
+      const res = await loadTokenFromStellar(tokenId);
+      setData(res.data);
+      setOwner(res.owner);
       Animated.timing(fadeIn, {
         toValue: 1,
         duration: 400,
@@ -257,83 +213,47 @@ export default function PieceScreen() {
       }).start();
     } catch (e: any) {
       setError(e.message);
-      setPageState("error");
+    } finally {
+      setLoading(false);
     }
   }
 
-  // ── Buy ───────────────────────────────────────────────────────
+  // ── Buy — mirrors the HTML buyNFT() exactly ───────────────
   async function buyNFT() {
     setBuyStep("checking");
     setBuyError("");
     try {
-      // If there are items already in cart, check if this piece is one of them.
-      // If not, add it first, then checkout the full cart.
-      // If cart is empty, just checkout this single piece.
-      const cartItems = cart.length > 0 ? cart : null;
-      const thisItemInCart = isInCart(tokenId);
-
-      // Build the items list for checkout
-      let checkoutItems;
-      if (cartItems && cartItems.length > 0) {
-        // Cart has items — include them all
-        // If current piece is not in cart yet, add it to the checkout list too
-        const base = cartItems.map((i) => ({
-          tokenId: String(i.token_id),
-          name: i.bag_name,
-          price: i.price_usdc,
-          image: i.image,
-        }));
-        if (!thisItemInCart) {
-          base.push({
-            tokenId: String(tokenId),
-            name: data.name,
-            price: data.price_usdc,
-            image: imgUrl || null,
-          });
-        }
-        checkoutItems = base;
-      } else {
-        // No cart — just this piece
-        checkoutItems = [
-          {
-            tokenId: String(tokenId),
-            name: data.name,
-            price: data.price_usdc,
-            image: imgUrl || null,
-          },
-        ];
-      }
-
-      const successBase = IS_WEB
-        ? `${window.location.origin}/success`
-        : `${BACKEND}/success`;
-      const cancelBase = IS_WEB ? window.location.href : `${BACKEND}/`;
-
       const res = await fetch(`${BACKEND}/api/create-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: checkoutItems,
-          successUrl: successBase,
-          cancelUrl: cancelBase,
+          tokenId: String(tokenId),
+          buyerWallet: "",
+          successUrl: IS_WEB
+            ? `${window.location.origin}/success.html`
+            : `${BACKEND}/success.html`,
+          cancelUrl: IS_WEB ? window.location.href : `${BACKEND}/`,
         }),
       });
-      const json = await res.json();
-      if (json.url) {
+
+      const data = await res.json();
+
+      if (data.url) {
         setBuyStep("redirecting");
-        if (IS_WEB) window.location.href = json.url;
-        else {
-          await Linking.openURL(json.url);
+        if (IS_WEB) {
+          window.location.href = data.url;
+        } else {
+          await Linking.openURL(data.url);
           setBuyStep("idle");
         }
-      } else if (json.unavailable) {
+      } else if (data.unavailable) {
         setBuyStep("unavailable");
         setBuyError(
-          `Token #${json.tokenId || tokenId} is no longer available. No charge has been made.`,
+          "This piece is no longer available. No charge has been made.",
         );
       } else {
         setBuyStep("error");
-        setBuyError(json.error || "Could not open checkout. Please try again.");
+        setBuyError(data.error || "Could not open checkout. Please try again.");
       }
     } catch (e: any) {
       setBuyStep("error");
@@ -341,49 +261,8 @@ export default function PieceScreen() {
     }
   }
 
-  // ── Claim ─────────────────────────────────────────────────────
-  async function submitClaim() {
-    if (!claimEmail.trim()) {
-      setClaimError("Please enter your email");
-      return;
-    }
-    setClaimStep("submitting");
-    setClaimError("");
-    try {
-      const res = await fetch(`${BACKEND}/api/claim`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tokenId: String(tokenId),
-          buyerEmail: claimEmail.trim(),
-          walletAddress: claimWallet.trim() || null,
-        }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setClaimResult(json);
-        setClaimStep("success");
-        setSaleData({
-          ...saleData,
-          claimed: true,
-          buyerWallet: json.buyerWallet,
-        });
-        setPageState("sold_claimed");
-      } else {
-        setClaimStep("error");
-        setClaimError(json.error || "Claim failed. Please try again.");
-      }
-    } catch (e: any) {
-      setClaimStep("error");
-      setClaimError(e.message || "Network error.");
-    }
-  }
-
   const imgUrl = data ? resolveImg(data.image) : "";
-  const price = data?.price_usdc
-    ? `${(data.price_usdc / 100).toFixed(0)}`
-    : "—";
-
+  const price = data?.price ? `${Number(data.price).toFixed(0)}` : "—";
   const init = (data?.name || "MB")
     .split(" ")
     .map((w: string) => w[0])
@@ -392,13 +271,21 @@ export default function PieceScreen() {
     .toUpperCase();
   const short = (a: string) => (a ? `${a.slice(0, 8)}...${a.slice(-6)}` : "—");
 
+  const buyLabel = {
+    idle: `Purchase This Piece  —  ${price}`,
+    checking: "Checking availability...",
+    redirecting: "Redirecting to Stripe...",
+    unavailable: "No Longer Available",
+    error: "Try Again",
+  }[buyStep];
+
   const buyDisabled =
     buyStep === "checking" ||
     buyStep === "redirecting" ||
     buyStep === "unavailable";
 
-  // ── Loading ───────────────────────────────────────────────────
-  if (pageState === "loading")
+  // ── Loading / Error screens ───────────────────────────────
+  if (loading)
     return (
       <View style={s.screen}>
         <ActivityIndicator color={C.gold} size="large" />
@@ -406,7 +293,7 @@ export default function PieceScreen() {
       </View>
     );
 
-  if (pageState === "error" || !data)
+  if (error || !data)
     return (
       <View style={s.screen}>
         <Text style={s.errTitle}>Could not load piece</Text>
@@ -445,23 +332,7 @@ export default function PieceScreen() {
           <View style={s.topBarCenter}>
             <Text style={s.topEye}>Michael By Christian</Text>
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-            <TouchableOpacity
-              onPress={() => router.push("/rarity" as any)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={s.rarityNavLink}>✦ Rarity</Text>
-            </TouchableOpacity>
-            <CartIcon />
-            <TouchableOpacity
-              onPress={() =>
-                router.push(session ? "/profile" : ("/auth" as any))
-              }
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={s.rarityNavLink}>{session ? "👤" : "Sign In"}</Text>
-            </TouchableOpacity>
-          </View>
+          <View style={{ width: 80 }} />
         </View>
       </SafeAreaView>
 
@@ -484,7 +355,7 @@ export default function PieceScreen() {
             <Image
               source={{ uri: imgUrl }}
               style={s.img}
-              resizeMode={IS_WEB ? "contain" : "cover"}
+              resizeMode="cover"
               onError={() => setImgErr(true)}
             />
           ) : (
@@ -501,21 +372,13 @@ export default function PieceScreen() {
               <Text style={s.nfcBadgeTxt}>✦ NFC Verified</Text>
             </View>
           ) : null}
-
-          {/* ── Status badge ── */}
-          {pageState === "listed" && (
+          {data.listed ? (
             <View style={s.listedBadge}>
               <Text style={s.listedBadgeTxt}>Listed</Text>
             </View>
-          )}
-          {pageState === "sold_unclaimed" && (
+          ) : (
             <View style={s.soldBadge}>
-              <Text style={s.soldBadgeTxt}>Sold · NFT Unclaimed</Text>
-            </View>
-          )}
-          {pageState === "sold_claimed" && (
-            <View style={s.claimedBadge}>
-              <Text style={s.claimedBadgeTxt}>✦ NFT Claimed</Text>
+              <Text style={s.soldBadgeTxt}>Sold</Text>
             </View>
           )}
         </View>
@@ -535,29 +398,37 @@ export default function PieceScreen() {
           <View style={s.titleRow}>
             <View style={{ flex: 1, marginRight: 16 }}>
               <Text style={s.eyebrow}>
-                MBC · {data.collection || "Collection 2026"}
+                {data.model ? `${data.model}  ·  ` : "MBC · "}
+                {data.collection || "Collection 2026"}
               </Text>
               <Text style={s.pieceTitle}>{data.name}</Text>
-              {data.silhouette ? (
-                <Text style={s.pieceSub}>
-                  {data.silhouette}
-                  {data.edition_type ? `  ·  ${data.edition_type}` : ""}
+              <Text style={s.pieceSub}>
+                {[data.silhouette, data.tailored_year]
+                  .filter(Boolean)
+                  .join("  ·  ")}
+              </Text>
+              {data.edition_run || data.edition_number ? (
+                <Text style={[s.pieceSub, { color: C.gold, marginTop: 3 }]}>
+                  {data.edition_run ? `Edition ${data.edition_run}` : ""}
+                  {data.edition_number && data.edition_total
+                    ? `  ·  ${data.edition_number} of ${data.edition_total}`
+                    : ""}
+                </Text>
+              ) : null}
+              {data.serial_number ? (
+                <Text
+                  style={[
+                    s.pieceSub,
+                    { fontFamily: "monospace", marginTop: 3, fontSize: 9 },
+                  ]}
+                >
+                  {data.serial_number}
                 </Text>
               ) : null}
             </View>
             <View style={s.priceBox}>
-              {pageState === "listed" ? (
-                <>
-                  <Text style={s.priceVal}>{price}</Text>
-                  <Text style={s.priceLbl}>USD</Text>
-                </>
-              ) : (
-                <>
-                  <Text style={s.lastSaleLbl}>Last Sale</Text>
-                  <Text style={s.priceVal}>{price}</Text>
-                  <Text style={s.priceLbl}>USD</Text>
-                </>
-              )}
+              <Text style={s.priceVal}>{price}</Text>
+              <Text style={s.priceLbl}>USD</Text>
             </View>
           </View>
 
@@ -566,7 +437,11 @@ export default function PieceScreen() {
             {[
               data.primary_texture,
               data.hardware,
-              data.nfc_chip_id && "NFC Embedded",
+              data.closure_type,
+              data.strap_type,
+              data.finishing,
+              data.capacity && `${data.capacity} Capacity`,
+              data.authentication && "NFC Embedded",
             ]
               .filter(Boolean)
               .map((v: string, i: number) => (
@@ -576,71 +451,8 @@ export default function PieceScreen() {
               ))}
           </View>
 
-          {/* ── Rarity info ── */}
-          {rarityData && (
-            <View style={s.rarityRow}>
-              <View style={s.rarityItem}>
-                <Text style={s.rarityLabel}>Rarity Rank</Text>
-                <Text style={s.rarityVal}>
-                  #{rarityData.rank}{" "}
-                  <Text style={s.rarityOf}>of {rarityData.total}</Text>
-                </Text>
-              </View>
-              <View style={s.rarityItem}>
-                <Text style={s.rarityLabel}>Tier</Text>
-                <Text style={s.rarityVal}>{rarityData.label}</Text>
-              </View>
-              <View style={s.rarityItem}>
-                <Text style={s.rarityLabel}>Top</Text>
-                <Text style={s.rarityVal}>
-                  {rarityData.percentile?.toFixed(1)}%
-                </Text>
-              </View>
-              <View style={[s.rarityItem, { borderRightWidth: 0 }]}>
-                <Text style={s.rarityLabel}>Traits</Text>
-                <Text style={s.rarityVal}>{rarityData.traitCount}</Text>
-              </View>
-            </View>
-          )}
-
-          {/* ── Add to Cart + Keep Shopping ── */}
-          {pageState === "listed" && (
-            <View style={{ flexDirection: "row", gap: 10, marginBottom: 10 }}>
-              <TouchableOpacity
-                style={[s.cartAddBtn, isInCart(tokenId) && s.cartAddBtnActive]}
-                onPress={() =>
-                  isInCart(tokenId)
-                    ? router.push("/cart" as any)
-                    : addToCart({
-                        token_id: tokenId,
-                        bag_name: data.name,
-                        price_usdc: data.price_usdc,
-                        image: imgUrl || null,
-                      })
-                }
-                activeOpacity={0.85}
-              >
-                <Text
-                  style={[
-                    s.cartAddBtnTxt,
-                    isInCart(tokenId) && { color: C.black },
-                  ]}
-                >
-                  {isInCart(tokenId) ? "✓ In Cart" : "+ Add to Cart"}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={s.keepShoppingBtn}
-                onPress={() => router.push("/collection" as any)}
-                activeOpacity={0.85}
-              >
-                <Text style={s.keepShoppingBtnTxt}>← Keep Shopping</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* ── PAGE STATE: LISTED — Buy button ── */}
-          {pageState === "listed" && (
+          {/* ── BUY BUTTON ── */}
+          {data.listed ? (
             <>
               <TouchableOpacity
                 style={[s.buyBtn, buyDisabled && s.buyBtnDisabled]}
@@ -657,22 +469,13 @@ export default function PieceScreen() {
                     }}
                   >
                     <ActivityIndicator color={C.black} size="small" />
-                    <Text style={s.buyBtnTxt}>
-                      {buyStep === "checking"
-                        ? "Checking availability..."
-                        : "Redirecting to Stripe..."}
-                    </Text>
+                    <Text style={s.buyBtnTxt}>{buyLabel}</Text>
                   </View>
                 ) : (
-                  <Text style={s.buyBtnTxt}>
-                    {buyStep === "unavailable"
-                      ? "No Longer Available"
-                      : buyStep === "error"
-                        ? "Try Again"
-                        : `Purchase This Piece  —  ${price}`}
-                  </Text>
+                  <Text style={s.buyBtnTxt}>{buyLabel}</Text>
                 )}
               </TouchableOpacity>
+
               {(buyStep === "error" || buyStep === "unavailable") && (
                 <View
                   style={[
@@ -695,274 +498,46 @@ export default function PieceScreen() {
                   )}
                 </View>
               )}
+
               <Text style={s.buyNote}>
-                💳 Card · 🍎 Apple Pay · G Google Pay{"\n"}Secure checkout
-                powered by Stripe
+                💳 Card · 🍎 Apple Pay · G Google Pay{"\n"}
+                No wallet needed · NFT delivered instantly on-chain
               </Text>
             </>
-          )}
-
-          {/* ── PAGE STATE: SOLD + UNCLAIMED — Claim section ── */}
-          {pageState === "sold_unclaimed" && (
-            <View style={s.claimBox}>
-              <Text style={s.claimTitle}>
-                Claim Your Authentication Contract
-              </Text>
-              {gainPercent ? (
-                <View style={s.gainRow}>
-                  <Text style={s.gainLabel}>Contract Gain</Text>
-                  <Text style={s.gainVal}>↑ {gainPercent}%</Text>
-                </View>
-              ) : null}
-              <Text style={s.claimSub}>
-                This piece has been purchased. If you are the buyer, enter your
-                email to claim your NFT.
-              </Text>
-
-              {claimStep === "success" ? (
-                <View style={s.claimSuccess}>
-                  <Text style={s.claimSuccessTitle}>
-                    ✓ NFT Claimed Successfully
-                  </Text>
-                  <Text style={s.claimSuccessSub}>
-                    Token #{tokenId} has been transferred to your Stellar
-                    wallet.
-                    {claimResult?.isCustodial
-                      ? " Wallet details sent to your email."
-                      : ""}
-                  </Text>
-                  {claimResult?.txHash && (
-                    <TouchableOpacity
-                      onPress={() => {
-                        const url = `${EXPLORER}/tx/${claimResult.txHash}`;
-                        if (IS_WEB) window.open(url, "_blank");
-                        else Linking.openURL(url);
-                      }}
-                    >
-                      <Text style={s.txLink}>View Transaction ↗</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ) : (
-                <>
-                  {/* If logged in, show read-only email + wallet — no need to type */}
-                  {session?.user?.email ? (
-                    <View style={s.claimAutoFill}>
-                      <Text style={s.claimAutoFillLabel}>Claiming as</Text>
-                      <Text style={s.claimAutoFillVal}>
-                        {session.user.email}
-                      </Text>
-                      {profile?.stellar_wallet_public && (
-                        <Text style={s.claimAutoFillWallet} numberOfLines={1}>
-                          {profile.stellar_wallet_public.slice(0, 12)}...
-                          {profile.stellar_wallet_public.slice(-6)}
-                        </Text>
-                      )}
-                    </View>
-                  ) : (
-                    <>
-                      <TextInput
-                        style={s.claimInput}
-                        placeholder="Your email address"
-                        placeholderTextColor={C.muted}
-                        value={claimEmail}
-                        onChangeText={setClaimEmail}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                      />
-                      <TextInput
-                        style={s.claimInput}
-                        placeholder="Stellar wallet address (optional — we'll create one for you)"
-                        placeholderTextColor={C.muted}
-                        value={claimWallet}
-                        onChangeText={setClaimWallet}
-                        autoCapitalize="none"
-                      />
-                    </>
-                  )}
-                  {claimError ? (
-                    <Text style={s.claimError}>{claimError}</Text>
-                  ) : null}
-                  {/* closes the guest input block */}
-                  <TouchableOpacity
-                    style={[
-                      s.claimBtn,
-                      claimStep === "submitting" && s.buyBtnDisabled,
-                    ]}
-                    onPress={submitClaim}
-                    disabled={claimStep === "submitting"}
-                    activeOpacity={0.85}
-                  >
-                    {claimStep === "submitting" ? (
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 10,
-                        }}
-                      >
-                        <ActivityIndicator color={C.black} size="small" />
-                        <Text style={s.buyBtnTxt}>Claiming...</Text>
-                      </View>
-                    ) : (
-                      <Text style={s.buyBtnTxt}>Claim NFT →</Text>
-                    )}
-                  </TouchableOpacity>
-                </>
-              )}
-
-              <TouchableOpacity
-                style={s.offerBtnRow}
-                onPress={() => setOfferVisible(true)}
-              >
-                <Text style={s.offerBtnTxt}>Make an Offer</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* ── PAGE STATE: SOLD + CLAIMED — Ownership view ── */}
-          {pageState === "sold_claimed" && (
-            <View style={s.ownerBox}>
-              <View style={s.ownerRow}>
-                <Text style={s.ownerLabel}>Owner</Text>
-                <Text style={s.ownerVal}>
-                  {saleData?.buyerWallet
-                    ? short(saleData.buyerWallet)
-                    : "Verified Owner"}
-                </Text>
-              </View>
-              {saleData?.soldAt && (
-                <View style={s.ownerRow}>
-                  <Text style={s.ownerLabel}>Acquired</Text>
-                  <Text style={s.ownerVal}>
-                    {new Date(saleData.soldAt).toLocaleDateString()}
-                  </Text>
-                </View>
-              )}
-              <View style={s.ownerRow}>
-                <Text style={s.ownerLabel}>Last Sale</Text>
-                <Text style={[s.ownerVal, { color: C.goldLt }]}>
-                  {price} USD
-                </Text>
-              </View>
-              <View style={s.ownerRow}>
-                <Text style={s.ownerLabel}>NFT Status</Text>
-                <Text style={[s.ownerVal, { color: C.green }]}>
-                  ✦ Claimed On-Chain
-                </Text>
-              </View>
-              {gainPercent ? (
-                <View style={s.ownerRow}>
-                  <Text style={s.ownerLabel}>Contract Gain</Text>
-                  <Text
-                    style={[s.ownerVal, { color: C.green, fontWeight: "700" }]}
-                  >
-                    ↑ {gainPercent}%
-                  </Text>
-                </View>
-              ) : null}
-              <TouchableOpacity
-                style={s.offerBtnRow}
-                onPress={() => setOfferVisible(true)}
-              >
-                <Text style={s.offerBtnTxt}>Make an Offer</Text>
-              </TouchableOpacity>
+          ) : (
+            <View style={s.soldBtn}>
+              <Text style={s.soldBtnTxt}>This Piece Has Been Sold</Text>
             </View>
           )}
 
           <View style={s.rule} />
 
-          {/* ── Activity section (shown when sold) ── */}
-          {(pageState === "sold_unclaimed" || pageState === "sold_claimed") && (
-            <>
-              <Text style={s.sectionLbl}>Activity</Text>
-              <View style={s.activityBox}>
-                {/* Mint event */}
-                <View style={s.activityRow}>
-                  <View style={s.activityDot} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.activityType}>Minted</Text>
-                    <Text style={s.activityDetail}>
-                      Token created on Stellar · Contract {short(CONTRACT)}
-                    </Text>
-                  </View>
-                  <Text style={s.activityDate}>
-                    {data.tailored_year || data.design_year || "2026"}
-                  </Text>
-                </View>
-                {/* Sale event */}
-                {saleData?.soldAt && (
-                  <View style={s.activityRow}>
-                    <View
-                      style={[s.activityDot, { backgroundColor: C.gold }]}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.activityType}>Sold</Text>
-                      <Text style={s.activityDetail}>
-                        Purchased via MBC · {price} USD
-                      </Text>
-                    </View>
-                    <Text style={s.activityDate}>
-                      {new Date(saleData.soldAt).toLocaleDateString()}
-                    </Text>
-                  </View>
-                )}
-                {/* Claim event */}
-                {saleData?.claimed && saleData?.claimedAt && (
-                  <View style={s.activityRow}>
-                    <View
-                      style={[s.activityDot, { backgroundColor: C.green }]}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.activityType}>NFT Claimed</Text>
-                      <Text style={s.activityDetail}>
-                        Transferred to{" "}
-                        {saleData.buyerWallet
-                          ? short(saleData.buyerWallet)
-                          : "owner wallet"}
-                      </Text>
-                    </View>
-                    <Text style={s.activityDate}>
-                      {new Date(saleData.claimedAt).toLocaleDateString()}
-                    </Text>
-                  </View>
-                )}
-                {/* Unclaimed note */}
-                {!saleData?.claimed && (
-                  <View style={s.activityRow}>
-                    <View
-                      style={[s.activityDot, { backgroundColor: C.muted }]}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[s.activityType, { color: C.muted }]}>
-                        NFT Transfer Pending
-                      </Text>
-                      <Text style={s.activityDetail}>Awaiting buyer claim</Text>
-                    </View>
-                  </View>
-                )}
-              </View>
-              <View style={s.rule} />
-            </>
-          )}
-
-          {/* ── Traits & Details ── */}
+          {/* ── Traits & Details — grouped ── */}
           <Text style={s.sectionLbl}>Traits & Details</Text>
-          <View style={s.traitsBox}>
-            {TRAITS.map(([key, label]) => {
+          {TRAIT_GROUPS.map((group) => {
+            const visibleTraits = group.traits.filter(([key]) => {
               const val = data[key];
-              if (!val || val === "" || val === 0) return null;
-              return (
-                <View key={key} style={s.traitRow}>
-                  <Text style={s.traitKey}>{label}</Text>
-                  <Text style={s.traitVal}>{String(val)}</Text>
+              return val && val !== "" && val !== 0;
+            });
+            if (visibleTraits.length === 0) return null;
+            return (
+              <View key={group.label} style={{ marginBottom: 16 }}>
+                <Text style={s.traitGroupLbl}>{group.label}</Text>
+                <View style={s.traitsBox}>
+                  {visibleTraits.map(([key, label]) => (
+                    <View key={key} style={s.traitRow}>
+                      <Text style={s.traitKey}>{label}</Text>
+                      <Text style={s.traitVal}>{String(data[key])}</Text>
+                    </View>
+                  ))}
                 </View>
-              );
-            })}
-          </View>
+              </View>
+            );
+          })}
+
+          <View style={s.rule} />
 
           {/* ── On-Chain Proof ── */}
-          <View style={s.rule} />
           <Text style={s.sectionLbl}>On-Chain Proof</Text>
           <View style={s.chainBox}>
             {[
@@ -970,11 +545,7 @@ export default function PieceScreen() {
               { k: "Token ID", v: `#${tokenId}`, gold: true },
               { k: "Standard", v: "Soroban NFT", mono: false },
               { k: "Network", v: "Stellar · Testnet", gold: true },
-              {
-                k: "Owner",
-                v: data.owner ? short(data.owner) : "Admin",
-                mono: true,
-              },
+              { k: "Owner", v: owner ? short(owner) : "Checking…", mono: true },
             ].map(({ k, v, gold, mono }) => (
               <View key={k} style={s.chainRow}>
                 <Text style={s.chainKey}>{k}</Text>
@@ -1003,12 +574,12 @@ export default function PieceScreen() {
             <Text style={s.explorerBtnTxt}>View on Stellar Explorer ↗</Text>
           </TouchableOpacity>
 
-          <View style={{ height: 100 }} />
+          <View style={{ height: data.listed ? 100 : 48 }} />
         </View>
       </Animated.ScrollView>
 
-      {/* ── Sticky bar ── */}
-      {pageState === "listed" && (
+      {/* ── Sticky buy bar ── */}
+      {data.listed && (
         <View style={s.stickyBar}>
           <SafeAreaView edges={["bottom"]}>
             <View
@@ -1045,113 +616,12 @@ export default function PieceScreen() {
           </SafeAreaView>
         </View>
       )}
-
-      {pageState === "sold_unclaimed" && (
-        <View style={s.stickyBar}>
-          <SafeAreaView edges={["bottom"]}>
-            <View
-              style={[
-                s.stickyInner,
-                IS_WEB && {
-                  maxWidth: MAX_W,
-                  alignSelf: "center" as const,
-                  width: "100%",
-                },
-              ]}
-            >
-              <View style={{ flex: 1, marginRight: 16 }}>
-                <Text style={s.stickyName} numberOfLines={1}>
-                  {data.name}
-                </Text>
-                <Text style={[s.stickyPrice, { color: C.muted }]}>
-                  NFT Unclaimed
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={s.stickyBtnOffer}
-                onPress={() => setOfferVisible(true)}
-                activeOpacity={0.85}
-              >
-                <Text style={s.stickyBtnOfferTxt}>Make Offer</Text>
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
-        </View>
-      )}
-
-      {pageState === "sold_claimed" && (
-        <View style={s.stickyBar}>
-          <SafeAreaView edges={["bottom"]}>
-            <View
-              style={[
-                s.stickyInner,
-                IS_WEB && {
-                  maxWidth: MAX_W,
-                  alignSelf: "center" as const,
-                  width: "100%",
-                },
-              ]}
-            >
-              <View style={{ flex: 1, marginRight: 16 }}>
-                <Text style={s.stickyName} numberOfLines={1}>
-                  {data.name}
-                </Text>
-                <Text style={[s.stickyPrice, { color: C.green }]}>
-                  ✦ NFT Claimed
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={s.stickyBtnOffer}
-                onPress={() => setOfferVisible(true)}
-                activeOpacity={0.85}
-              >
-                <Text style={s.stickyBtnOfferTxt}>Make Offer</Text>
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
-        </View>
-      )}
-
-      {/* ── Make Offer Modal ── */}
-      <Modal
-        visible={offerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setOfferVisible(false)}
-      >
-        <View style={s.modalOverlay}>
-          <View style={s.modalCard}>
-            <Text style={s.modalTitle}>Make an Offer</Text>
-            <Text style={s.modalSub}>
-              Offers are coming soon.{"\n"}Contact us to express interest in
-              this piece.
-            </Text>
-            <TouchableOpacity
-              style={s.modalBtn}
-              onPress={() => {
-                setOfferVisible(false);
-                Linking.openURL(
-                  `mailto:youngcompltd@gmail.com?subject=Offer for ${data.name} — Token #${tokenId}`,
-                );
-              }}
-            >
-              <Text style={s.modalBtnTxt}>Contact Us →</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setOfferVisible(false)}
-              style={{ marginTop: 12 }}
-            >
-              <Text style={s.modalClose}>Dismiss</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
 
-// ── Styles ─────────────────────────────────────────────────────
-const IMG_H = IS_WEB ? Math.min(width * 0.6, 500) : width;
+// ── Styles ────────────────────────────────────────────────────
+const IMG_H = IS_WEB ? 480 : width;
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.black },
@@ -1195,7 +665,6 @@ const s = StyleSheet.create({
     color: C.gold,
   },
   backLink: { fontSize: 12, color: C.muted },
-  rarityNavLink: { fontSize: 11, color: C.gold, letterSpacing: 0.5 },
 
   topBar: {
     backgroundColor: C.charcoal,
@@ -1222,7 +691,7 @@ const s = StyleSheet.create({
   imgWrap: {
     width: "100%",
     height: IMG_H,
-    backgroundColor: IS_WEB ? C.black : C.warm,
+    backgroundColor: C.warm,
     overflow: "hidden",
   },
   img: { width: "100%", height: "100%" },
@@ -1242,7 +711,6 @@ const s = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(12,11,9,0.15)",
   },
-
   tokenBadge: {
     position: "absolute",
     bottom: 14,
@@ -1307,22 +775,6 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.red,
   },
-  claimedBadge: {
-    position: "absolute",
-    top: 14,
-    right: 16,
-    backgroundColor: "rgba(91,175,133,0.2)",
-    borderWidth: 1,
-    borderColor: "rgba(91,175,133,0.5)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  claimedBadgeTxt: {
-    fontSize: 7,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: C.green,
-  },
 
   content: { backgroundColor: C.black, paddingHorizontal: 24, paddingTop: 28 },
   titleRow: {
@@ -1360,53 +812,6 @@ const s = StyleSheet.create({
     color: C.muted,
     marginTop: 2,
   },
-  lastSaleLbl: {
-    fontSize: 7,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: C.muted,
-    marginBottom: 2,
-  },
-  rarityRow: {
-    flexDirection: "row",
-    borderWidth: 1,
-    borderColor: C.border,
-    marginBottom: 20,
-    overflow: "hidden",
-  },
-  rarityItem: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 10,
-    borderRightWidth: 1,
-    borderRightColor: C.border,
-    backgroundColor: C.charcoal,
-  },
-  rarityLabel: {
-    fontSize: 7,
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
-    color: C.muted,
-    marginBottom: 4,
-  },
-  rarityVal: { fontSize: 13, color: C.goldLt, fontWeight: "700" },
-  rarityOf: { fontSize: 9, color: C.muted, fontWeight: "400" },
-  gainRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-    marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-  },
-  gainLabel: {
-    fontSize: 9,
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
-    color: C.muted,
-  },
-  gainVal: { fontSize: 13, color: C.green, fontWeight: "700" },
 
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 24 },
   chip: {
@@ -1422,34 +827,6 @@ const s = StyleSheet.create({
     color: C.muted,
   },
 
-  cartAddBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: C.gold,
-    padding: 16,
-    alignItems: "center",
-  },
-  cartAddBtnActive: { backgroundColor: C.gold },
-  cartAddBtnTxt: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: C.gold,
-  },
-  keepShoppingBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: C.border,
-    padding: 16,
-    alignItems: "center",
-  },
-  keepShoppingBtnTxt: {
-    fontSize: 10,
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
-    color: C.muted,
-  },
   buyBtn: {
     backgroundColor: C.gold,
     padding: 18,
@@ -1487,109 +864,16 @@ const s = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 4,
   },
-
-  claimBox: {
+  soldBtn: {
     borderWidth: 1,
     borderColor: C.border,
-    padding: 20,
-    marginBottom: 10,
-    backgroundColor: C.charcoal,
-  },
-  claimTitle: {
-    fontSize: 11,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: C.gold,
-    marginBottom: 8,
-    fontWeight: "600",
-  },
-  claimSub: { fontSize: 12, color: C.muted, lineHeight: 18, marginBottom: 16 },
-  claimInput: {
-    borderWidth: 1,
-    borderColor: C.border,
-    backgroundColor: C.warm,
-    color: C.cream,
-    fontSize: 13,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    padding: 18,
+    alignItems: "center",
     marginBottom: 10,
   },
-  claimAutoFill: {
-    backgroundColor: C.warm,
-    borderWidth: 1,
-    borderColor: C.border,
-    padding: 14,
-    marginBottom: 12,
-  },
-  claimAutoFillLabel: {
-    fontSize: 8,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: C.gold,
-    marginBottom: 4,
-  },
-  claimAutoFillVal: { fontSize: 13, color: C.cream, marginBottom: 4 },
-  claimAutoFillWallet: {
+  soldBtnTxt: {
     fontSize: 10,
-    color: C.muted,
-    fontFamily: "monospace",
-  },
-  claimBtn: {
-    backgroundColor: C.gold,
-    padding: 16,
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  claimError: { fontSize: 12, color: C.red, marginBottom: 10 },
-  claimSuccess: {
-    backgroundColor: "rgba(91,175,133,0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(91,175,133,0.4)",
-    padding: 16,
-  },
-  claimSuccessTitle: {
-    fontSize: 13,
-    color: C.green,
-    fontWeight: "600",
-    marginBottom: 6,
-  },
-  claimSuccessSub: { fontSize: 12, color: C.muted, lineHeight: 18 },
-  txLink: { fontSize: 11, color: C.gold, marginTop: 8 },
-
-  ownerBox: {
-    borderWidth: 1,
-    borderColor: C.border,
-    backgroundColor: C.charcoal,
-    marginBottom: 10,
-    overflow: "hidden",
-  },
-  ownerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-  },
-  ownerLabel: {
-    fontSize: 9,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    color: C.muted,
-  },
-  ownerVal: { fontSize: 12, color: C.cream, fontFamily: "monospace" },
-
-  offerBtnRow: {
-    borderWidth: 1,
-    borderColor: C.border,
-    padding: 14,
-    alignItems: "center",
-    marginTop: 10,
-  },
-  offerBtnTxt: {
-    fontSize: 9,
-    letterSpacing: 2,
+    letterSpacing: 2.5,
     textTransform: "uppercase",
     color: C.muted,
   },
@@ -1604,38 +888,14 @@ const s = StyleSheet.create({
     fontWeight: "600",
   },
 
-  activityBox: {
-    borderWidth: 1,
-    borderColor: C.border,
-    overflow: "hidden",
-    marginBottom: 4,
-  },
-  activityRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-    backgroundColor: C.charcoal,
-    gap: 12,
-  },
-  activityDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: C.cream,
-    marginTop: 4,
-  },
-  activityType: {
-    fontSize: 11,
-    color: C.cream,
+  traitGroupLbl: {
+    fontSize: 7,
+    letterSpacing: 2.5,
+    textTransform: "uppercase",
+    color: C.gold,
+    marginBottom: 6,
     fontWeight: "600",
-    marginBottom: 2,
   },
-  activityDetail: { fontSize: 10, color: C.muted, letterSpacing: 0.3 },
-  activityDate: { fontSize: 10, color: C.muted },
-
   traitsBox: {
     borderWidth: 1,
     borderColor: C.border,
@@ -1690,6 +950,7 @@ const s = StyleSheet.create({
     color: C.muted,
   },
   chainVal: { fontSize: 11, color: C.cream },
+
   explorerBtn: {
     borderWidth: 1,
     borderColor: C.border,
@@ -1730,62 +991,4 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.black,
   },
-  stickyBtnOffer: {
-    borderWidth: 1,
-    borderColor: C.border,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  stickyBtnOfferTxt: {
-    fontSize: 9,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: C.muted,
-  },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(12,11,9,0.92)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  modalCard: {
-    backgroundColor: C.charcoal,
-    borderWidth: 1,
-    borderColor: C.border,
-    padding: 32,
-    width: "100%",
-    maxWidth: 400,
-    alignItems: "center",
-  },
-  modalTitle: {
-    fontFamily: "serif",
-    fontSize: 24,
-    fontWeight: "900",
-    color: C.cream,
-    marginBottom: 12,
-  },
-  modalSub: {
-    fontSize: 13,
-    color: C.muted,
-    textAlign: "center",
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  modalBtn: {
-    backgroundColor: C.gold,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    width: "100%",
-    alignItems: "center",
-  },
-  modalBtnTxt: {
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: C.black,
-  },
-  modalClose: { fontSize: 11, color: C.muted, letterSpacing: 1 },
 });

@@ -86,7 +86,7 @@ async function checkBagAvailability(tokenId) {
   const t = raw.traits || {};
   return {
     name: raw.name || `MBC Token #${tokenId}`,
-    price_usdc: raw.price_usdc ? Number(raw.price_usdc) : 20000,
+    price: raw.price ? Number(raw.price) : 20000,
     edition_type: t.edition_type || raw.edition_type || "",
     image: raw.image
       ? raw.image.startsWith("ipfs://")
@@ -165,7 +165,7 @@ module.exports = async (req, res) => {
             "Handcrafted luxury bag. NFC embedded. Authenticated.",
           ...(bag.image ? { images: [bag.image] } : {}),
         },
-        unit_amount: bag.price_usdc,
+        unit_amount: bag.price * 100, // price stored as dollars, Stripe needs cents
       },
       quantity: 1,
     }));
