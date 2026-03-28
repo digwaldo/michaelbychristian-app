@@ -62,7 +62,7 @@ export type CartItem = {
   user_id: string | null;
   token_id: number;
   bag_name: string;
-  price_usdc: number;
+  price: number;
   image: string | null;
   added_at: string;
 };
