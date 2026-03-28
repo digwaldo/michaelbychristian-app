@@ -598,7 +598,7 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   key={i}
                   style={s.bagCard}
-                  onPress={() => router.push("/collection")}
+                  onPress={() => {}}
                   activeOpacity={0.88}
                 >
                   <View style={s.bagImgWrap}>
@@ -663,13 +663,13 @@ export default function HomeScreen() {
               </Text>
               <Text style={s.phQuoteAttr}>— Michael By Christian</Text>
             </View>
-            {/*<TouchableOpacity
+            <TouchableOpacity
               style={s.btnGold}
               onPress={() => {}}
               activeOpacity={0.85}
             >
               <Text style={s.btnGoldTxt}>Own a Piece of This →</Text>
-            </TouchableOpacity>*/}
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -1207,3 +1207,4 @@ const s = StyleSheet.create({
   },
   footerHandle: { fontSize: 10, color: C.muted },
 });
+// staging test
