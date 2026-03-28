@@ -1,8 +1,8 @@
 "use client";
 
+import { Video } from "expo-av";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { VideoView, useVideoPlayer } from "expo-video";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -229,20 +229,8 @@ export default function HomeScreen() {
   const { session } = useAuth();
   const fade = useRef(new Animated.Value(0)).current;
   const slideY = useRef(new Animated.Value(24)).current;
-  const player = useVideoPlayer(require("../assets/hero-video.mp4"));
-
-  useEffect(() => {
-    player.loop = true;
-    player.muted = true;
-    const start = async () => {
-      try {
-        player.play();
-      } catch (e) {
-        console.log("Video autoplay failed:", e);
-      }
-    };
-    start();
-  }, [player]);
+  // Video hosted remotely — swap in your CDN/IPFS URL here
+  const VIDEO_URL = ""; // e.g. "https://your-cdn.com/hero-video.mp4"
 
   useEffect(() => {
     Animated.parallel([
@@ -349,14 +337,18 @@ export default function HomeScreen() {
         <View style={s.heroSection}>
           <View style={[s.heroFrame, { height: heroH, width: "100%" }]}>
             <View style={s.heroMedia}>
-              <VideoView
-                player={player}
-                style={s.heroVideo}
-                contentFit={isPhone ? "contain" : "cover"}
-                nativeControls={false}
-                allowsFullscreen={false}
-                startsPictureInPictureAutomatically={false}
-              />
+              {VIDEO_URL ? (
+                <Video
+                  source={{ uri: VIDEO_URL }}
+                  style={s.heroVideo}
+                  resizeMode={isPhone ? "contain" : ("cover" as any)}
+                  shouldPlay
+                  isLooping
+                  isMuted
+                />
+              ) : (
+                <View style={[s.heroVideo, { backgroundColor: "#0C0B09" }]} />
+              )}
             </View>
             <LinearGradient
               colors={
