@@ -12,7 +12,7 @@ import {
   View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { BACKEND, C } from "../lib/theme";
+import { C } from "../lib/theme";
 
 const IS_WEB = Platform.OS === "web";
 const MAX_W = IS_WEB ? 760 : undefined;
@@ -115,37 +115,10 @@ export default function RarityScreen() {
   } | null>(null);
 
   useEffect(() => {
-    loadDist();
+    // Distribution will populate once mainnet contract is live
+    // and collection loads compute rarity scores into KV
+    setLoading(false);
   }, []);
-
-  async function loadDist() {
-    try {
-      const res = await fetch(`${BACKEND}/api/rarity?type=distribution`);
-      const json = await res.json();
-
-      if (!json.found) {
-        setLoading(false);
-        return;
-      }
-
-      setDist(
-        json.distribution.map((d: any) => ({
-          label: d.label,
-          count: d.count,
-          total: json.total,
-        })),
-      );
-      if (json.topTokenId)
-        setTopBag({
-          name: `Token #${json.topTokenId}`,
-          tokenId: json.topTokenId,
-        });
-    } catch (e) {
-      console.log("rarity dist fetch failed:", e);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   return (
     <View style={s.root}>
@@ -204,18 +177,18 @@ export default function RarityScreen() {
             <View style={s.loadBox}>
               <ActivityIndicator color={C.gold} size="small" />
             </View>
-          ) : dist.length > 0 ? (
+          ) : (
             <View style={s.tierDist}>
               {TIERS.map((tier) => {
                 const d = dist.find((d) => d.label === tier.label);
                 const count = d?.count || 0;
-                const pct = d ? Math.round((count / d.total) * 100) : 0;
-                const barWidth = d
-                  ? `${Math.max((count / d.total) * 100, 2)}%`
-                  : "2%";
+                const total = d?.total || 0;
+                const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                const barWidth =
+                  total > 0 ? `${Math.max((count / total) * 100, 2)}%` : "2%";
                 return (
                   <View
-                    key={tier.display || tier.label}
+                    key={(tier as any).display || tier.label}
                     style={[
                       s.tierRow,
                       { backgroundColor: tier.bg, borderColor: tier.border },
@@ -234,6 +207,7 @@ export default function RarityScreen() {
                           {
                             width: barWidth as any,
                             backgroundColor: tier.color,
+                            opacity: total > 0 ? 1 : 0.2,
                           },
                         ]}
                       />
@@ -244,12 +218,11 @@ export default function RarityScreen() {
                   </View>
                 );
               })}
-            </View>
-          ) : (
-            <View style={s.noData}>
-              <Text style={s.noDataTxt}>
-                Distribution available after collection loads
-              </Text>
+              {dist.length === 0 && (
+                <Text style={s.noDataTxt}>
+                  Live distribution available once mainnet collection launches
+                </Text>
+              )}
             </View>
           )}
 

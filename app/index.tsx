@@ -1,8 +1,8 @@
 "use client";
 
-import { Video } from "expo-av";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
+// Video: set VIDEO_URL below when ready to add hero video
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -337,18 +337,8 @@ export default function HomeScreen() {
         <View style={s.heroSection}>
           <View style={[s.heroFrame, { height: heroH, width: "100%" }]}>
             <View style={s.heroMedia}>
-              {VIDEO_URL ? (
-                <Video
-                  source={{ uri: VIDEO_URL }}
-                  style={s.heroVideo}
-                  resizeMode={isPhone ? "contain" : ("cover" as any)}
-                  shouldPlay
-                  isLooping
-                  isMuted
-                />
-              ) : (
-                <View style={[s.heroVideo, { backgroundColor: "#0C0B09" }]} />
-              )}
+              {/* Hero background — set VIDEO_URL to enable video */}
+              <View style={[s.heroVideo, { backgroundColor: "#0C0B09" }]} />
             </View>
             <LinearGradient
               colors={
