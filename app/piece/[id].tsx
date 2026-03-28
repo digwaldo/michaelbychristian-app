@@ -51,41 +51,18 @@ const useClientLayout = () => {
 };
 
 interface BagItem {
-  src: number;
+  src: string | null;
   name: string;
   color: string;
 }
+// Bag images loaded from IPFS/remote — no local assets needed
 const BAGS: BagItem[] = [
-  {
-    src: require("../assets/bags/bag1.png") as number,
-    name: "Prototype - Haven",
-    color: "White · Gold",
-  },
-  {
-    src: require("../assets/bags/bag2.png") as number,
-    name: "Prototype - Haven",
-    color: "Black · Gold",
-  },
-  {
-    src: require("../assets/bags/bag3.png") as number,
-    name: "Prototype - The Bride",
-    color: "Brown · Black",
-  },
-  {
-    src: require("../assets/bags/bag4.png") as number,
-    name: "Prototype - The Bride",
-    color: "Yellow · Red",
-  },
-  {
-    src: require("../assets/bags/bag5.png") as number,
-    name: "Prototype - The Bride",
-    color: "Red · Black",
-  },
-  {
-    src: require("../assets/bags/bag6.png") as number,
-    name: "Prototype - The Bride",
-    color: "Yellow · Black",
-  },
+  { src: null, name: "Prototype - Haven", color: "White · Gold" },
+  { src: null, name: "Prototype - Haven", color: "Black · Gold" },
+  { src: null, name: "Prototype - The Bride", color: "Brown · Black" },
+  { src: null, name: "Prototype - The Bride", color: "Yellow · Red" },
+  { src: null, name: "Prototype - The Bride", color: "Red · Black" },
+  { src: null, name: "Prototype - The Bride", color: "Yellow · Black" },
 ];
 
 const MARQUEE = [
@@ -578,11 +555,17 @@ export default function HomeScreen() {
                   activeOpacity={0.88}
                 >
                   <View style={s.bagImgWrap}>
-                    <Image
-                      source={bag.src}
-                      style={s.bagImg}
-                      resizeMode="contain"
-                    />
+                    {bag.src ? (
+                      <Image
+                        source={{ uri: bag.src }}
+                        style={s.bagImg}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <View
+                        style={[s.bagImg, { backgroundColor: "#1A1916" }]}
+                      />
+                    )}
                   </View>
                   <View style={s.bagCardBody}>
                     <Text style={s.bagName} numberOfLines={1}>
@@ -602,11 +585,17 @@ export default function HomeScreen() {
                   activeOpacity={0.88}
                 >
                   <View style={s.bagImgWrap}>
-                    <Image
-                      source={bag.src}
-                      style={s.bagImg}
-                      resizeMode="contain"
-                    />
+                    {bag.src ? (
+                      <Image
+                        source={{ uri: bag.src }}
+                        style={s.bagImg}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <View
+                        style={[s.bagImg, { backgroundColor: "#1A1916" }]}
+                      />
+                    )}
                   </View>
                   <View style={s.bagCardBody}>
                     <Text style={s.bagName} numberOfLines={1}>
