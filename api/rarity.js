@@ -7,6 +7,18 @@
 
 const { Redis } = require("@upstash/redis");
 
+const ENV_PREFIX = (process.env.STELLAR_NETWORK_PASSPHRASE || "").includes(
+  "Test",
+)
+  ? "test"
+  : "prod";
+function rarityKey(tokenId) {
+  return `${ENV_PREFIX}:rarity:${tokenId}`;
+}
+function rarityPattern() {
+  return `${ENV_PREFIX}:rarity:*`;
+}
+
 const redis = new Redis({
   url: process.env.KV_REST_API_URL,
   token: process.env.KV_REST_API_TOKEN,
@@ -32,7 +44,7 @@ module.exports = async (req, res) => {
       const pipeline = redis.pipeline();
       for (const r of rarities) {
         pipeline.set(
-          `rarity:${r.tokenId}`,
+          rarityKey(r.tokenId),
           JSON.stringify({
             rank: r.rank,
             label: r.label,
@@ -62,7 +74,7 @@ module.exports = async (req, res) => {
   if (type === "token") {
     if (!token_id) return res.status(400).json({ error: "token_id required" });
     try {
-      const raw = await redis.get(`rarity:${token_id}`);
+      const raw = await redis.get(rarityKey(token_id));
       if (!raw) return res.status(200).json({ found: false });
       const data = typeof raw === "string" ? JSON.parse(raw) : raw;
       return res.status(200).json({ found: true, ...data });
@@ -75,7 +87,7 @@ module.exports = async (req, res) => {
   // ── GET ?type=distribution — full tier breakdown ──────────────
   if (type === "distribution") {
     try {
-      const keys = await redis.keys("rarity:*");
+      const keys = await redis.keys(rarityPattern());
       if (!keys.length) {
         return res.status(200).json({
           found: false,
@@ -117,7 +129,7 @@ module.exports = async (req, res) => {
         );
         if (matchedTier) counts[matchedTier]++;
 
-        const tokenId = Number(keys[idx].replace("rarity:", ""));
+        const tokenId = Number(keys[idx].replace(`${ENV_PREFIX}:rarity:`, ""));
         if (data.rank < topRank) {
           topRank = data.rank;
           topTokenId = tokenId;

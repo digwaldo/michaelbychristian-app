@@ -32,8 +32,12 @@ export default function CartScreen() {
     setCheckoutError("");
 
     try {
-      // Create checkout session with multiple items
-      const res = await fetch(`${BACKEND}/api/create-checkout`, {
+      // Use relative URL on web to avoid CORS — full URL only needed for native
+      const checkoutUrl = IS_WEB
+        ? `/api/create-checkout`
+        : `${BACKEND}/api/create-checkout`;
+
+      const res = await fetch(checkoutUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
