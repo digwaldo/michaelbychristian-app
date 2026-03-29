@@ -3,14 +3,14 @@
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-    ActivityIndicator,
-    Image,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
@@ -24,7 +24,7 @@ export default function CartScreen() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
 
-  const formatPrice = (p: number) => `$${(p / 100).toFixed(0)}`;
+  const formatPrice = (p: number) => (p ? `$${Number(p).toFixed(0)}` : "—");
 
   async function checkout() {
     if (!cart.length) return;
@@ -40,7 +40,7 @@ export default function CartScreen() {
           items: cart.map((i) => ({
             tokenId: String(i.token_id),
             name: i.bag_name,
-            price: i.price_usdc,
+            price: i.price,
             image: i.image,
           })),
           buyerWallet: profile?.stellar_wallet_public || null,
@@ -130,7 +130,7 @@ export default function CartScreen() {
                     </Text>
                     <Text style={s.itemToken}>Token #{item.token_id}</Text>
                     <Text style={s.itemPrice}>
-                      {formatPrice(item.price_usdc)} USD
+                      {formatPrice(item.price)} USD
                     </Text>
                   </View>
                   <TouchableOpacity
