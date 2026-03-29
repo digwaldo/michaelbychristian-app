@@ -152,6 +152,11 @@ module.exports = async (req, res) => {
       req.headers.origin || "https://michaelbychristian-app.vercel.app";
     const baseSuccessUrl = successUrl || `${origin}/success`;
     const baseCancelUrl = cancelUrl || `${origin}/`;
+    // Bypass Vercel deployment protection for staging redirects
+    const bypassToken = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || "";
+    const bypassParam = bypassToken
+      ? `&x-vercel-protection-bypass=${bypassToken}`
+      : "";
 
     // Check availability + build line items for all tokens
     const bags = [];
@@ -205,14 +210,14 @@ module.exports = async (req, res) => {
     const successTokenParam =
       bags.length === 1
         ? `token_id=${bags[0].tokenId}`
-        : `token_ids=${tokenIds}`;
+        : `token_ids=${encodeURIComponent(tokenIds)}`;
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       line_items: lineItems,
       mode: "payment",
       allow_promotion_codes: true,
-      success_url: `${baseSuccessUrl}?session_id={CHECKOUT_SESSION_ID}&${successTokenParam}`,
+      success_url: `${baseSuccessUrl}?session_id={CHECKOUT_SESSION_ID}&${successTokenParam}${bypassParam}`,
       cancel_url: baseCancelUrl,
       metadata: {
         token_ids: tokenIds,
