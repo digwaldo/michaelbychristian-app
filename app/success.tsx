@@ -38,9 +38,10 @@ export default function SuccessScreen() {
 
   async function verify() {
     try {
-      const res = await fetch(
-        `${BACKEND}/api/verify-payment?session_id=${session_id}`,
-      );
+      const verifyUrl = IS_WEB
+        ? `/api/verify-payment?session_id=${session_id}`
+        : `${BACKEND}/api/verify-payment?session_id=${session_id}`;
+      const res = await fetch(verifyUrl);
       const json = await res.json();
       if (!json.paid) {
         setErrorMsg("Payment could not be verified.");
