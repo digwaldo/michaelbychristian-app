@@ -9,10 +9,10 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { C } from "../lib/theme";
+import { BACKEND, C, CONTRACT, PASSPHRASE, RPC_URL } from "../lib/theme";
 
 const IS_WEB = Platform.OS === "web";
 const MAX_W = IS_WEB ? 760 : undefined;
@@ -115,10 +115,186 @@ export default function RarityScreen() {
   } | null>(null);
 
   useEffect(() => {
-    // Distribution will populate once mainnet contract is live
-    // and collection loads compute rarity scores into KV
-    setLoading(false);
+    loadDist();
   }, []);
+
+  async function loadDist() {
+    try {
+      // 1. Try KV first (fast — populated when collection page loads)
+      const res = await fetch(`${BACKEND}/api/rarity?type=distribution`);
+      const json = await res.json();
+
+      if (json.found && json.distribution?.length > 0) {
+        setDist(
+          json.distribution.map((d: any) => ({
+            label: d.label,
+            count: d.count,
+            total: json.total,
+          })),
+        );
+        if (json.topTokenId)
+          setTopBag({
+            name: `Token #${json.topTokenId}`,
+            tokenId: json.topTokenId,
+          });
+        setLoading(false);
+        return;
+      }
+
+      // 2. KV empty — compute directly from contract
+      await loadFromContract();
+    } catch (e) {
+      console.log("KV fetch failed, trying contract:", e);
+      await loadFromContract();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadFromContract() {
+    try {
+      const Sdk = await import("@stellar/stellar-sdk" as any);
+      const server = new Sdk.rpc.Server(RPC_URL);
+      const contract = new Sdk.Contract(CONTRACT);
+      const keypair = Sdk.Keypair.random();
+      const account = new Sdk.Account(keypair.publicKey(), "0");
+
+      async function sim(fn: string, args: any[] = []) {
+        const tx = new Sdk.TransactionBuilder(account, {
+          fee: Sdk.BASE_FEE,
+          networkPassphrase: PASSPHRASE,
+        })
+          .addOperation(contract.call(fn, ...args))
+          .setTimeout(30)
+          .build();
+        const result = await server.simulateTransaction(tx);
+        if (!Sdk.rpc.Api.isSimulationSuccess(result)) return null;
+        return Sdk.scValToNative(result.result.retval);
+      }
+
+      const total = await sim("total_supply");
+      if (!total || Number(total) === 0) return;
+
+      const totalNum = Number(total);
+      const scores: { tokenId: number; score: number; label: string }[] = [];
+
+      // Load all tokens and compute rarity
+      const items: any[] = [];
+      for (let i = 1; i <= totalNum; i++) {
+        try {
+          const raw = await sim("full_token_data", [
+            Sdk.nativeToScVal(i, { type: "u64" }),
+          ]);
+          if (raw) items.push({ tokenId: i, ...raw });
+        } catch {
+          /* skip */
+        }
+      }
+
+      if (items.length === 0) return;
+
+      // Count trait frequencies
+      const traitKeys = [
+        "primary_texture",
+        "secondary_texture",
+        "hardware",
+        "finishing",
+        "silhouette",
+        "model",
+        "primary_color",
+        "secondary_color",
+        "closure_type",
+        "strap_type",
+        "capacity",
+        "textured_pattern",
+        "interior_lining",
+        "authentication",
+        "collection",
+        "collaboration",
+        "origin_country",
+        "manufacture_country",
+        "design_status",
+        "archive_status",
+        "tailored_year",
+        "design_year",
+      ];
+
+      const weights: Record<string, number> = {
+        primary_texture: 3,
+        secondary_texture: 3,
+        hardware: 3,
+        finishing: 3,
+        silhouette: 2,
+        model: 2,
+        primary_color: 2,
+        secondary_color: 2,
+        closure_type: 2,
+        strap_type: 2,
+        capacity: 2,
+      };
+
+      const counts: Record<string, Record<string, number>> = {};
+      traitKeys.forEach((k) => {
+        counts[k] = {};
+      });
+      items.forEach((item) => {
+        traitKeys.forEach((k) => {
+          const v = item[k];
+          if (v && typeof v === "string" && v.trim()) {
+            counts[k][v] = (counts[k][v] || 0) + 1;
+          }
+        });
+      });
+
+      const scored = items
+        .map((item) => {
+          let score = 0;
+          traitKeys.forEach((k) => {
+            const v = item[k];
+            if (!v || typeof v !== "string" || !v.trim()) return;
+            const count = counts[k][v] || 1;
+            const weight = weights[k] || 1;
+            score += (items.length / count) * weight;
+          });
+          return { tokenId: item.tokenId, score };
+        })
+        .sort((a, b) => b.score - a.score);
+
+      // Assign tiers
+      const tierCounts: Record<string, number> = {
+        Haute: 0,
+        "Tres Rare": 0,
+        Prestige: 0,
+        Signature: 0,
+        Essential: 0,
+      };
+      scored.forEach((item, idx) => {
+        const pct = ((idx + 1) / scored.length) * 100;
+        let label = "Essential";
+        if (pct <= 5) label = "Haute";
+        else if (pct <= 15) label = "Tres Rare";
+        else if (pct <= 35) label = "Prestige";
+        else if (pct <= 65) label = "Signature";
+        tierCounts[label]++;
+      });
+
+      const distribution = Object.entries(tierCounts).map(([label, count]) => ({
+        label,
+        count,
+        total: items.length,
+      }));
+
+      setDist(distribution);
+      if (scored.length > 0) {
+        setTopBag({
+          name: `Token #${scored[0].tokenId}`,
+          tokenId: scored[0].tokenId,
+        });
+      }
+    } catch (e) {
+      console.log("Contract load failed:", e);
+    }
+  }
 
   return (
     <View style={s.root}>
@@ -335,13 +511,13 @@ export default function RarityScreen() {
           <View style={s.rule} />
 
           {/* ── CTA ── */}
-          {/*<TouchableOpacity
+          <TouchableOpacity
             style={s.ctaBtn}
             onPress={() => router.push("/collection" as any)}
             activeOpacity={0.85}
           >
             <Text style={s.ctaBtnTxt}>Browse the Collection →</Text>
-          </TouchableOpacity>*/}
+          </TouchableOpacity>
 
           <View style={{ height: 60 }} />
         </View>
