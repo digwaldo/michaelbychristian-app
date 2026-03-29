@@ -133,22 +133,34 @@ export default function ProfileScreen() {
     if (!session?.user?.email) return;
     setPiecesLoading(true);
     try {
-      const res = await fetch(`${BACKEND}/api/sold?type=list`);
+      const res = await fetch(
+        IS_WEB ? `/api/sold?type=list` : `${BACKEND}/api/sold?type=list`,
+      );
       const { soldTokenIds } = await res.json();
 
       const owned: OwnedPiece[] = [];
       await Promise.all(
         soldTokenIds.map(async (tokenId: number) => {
           const [checkRes, myRes, rarityRes] = await Promise.all([
-            fetch(`${BACKEND}/api/sold?type=check&token_id=${tokenId}`)
-              .then((r) => r.json())
-              .catch(() => null),
             fetch(
-              `${BACKEND}/api/my-pieces?email=${encodeURIComponent(session.user!.email!)}&token_id=${tokenId}`,
+              IS_WEB
+                ? `/api/sold?type=check&token_id=${tokenId}`
+                : `${BACKEND}/api/sold?type=check&token_id=${tokenId}`,
             )
               .then((r) => r.json())
               .catch(() => null),
-            fetch(`${BACKEND}/api/rarity?type=token&token_id=${tokenId}`)
+            fetch(
+              IS_WEB
+                ? `/api/my-pieces?email=${encodeURIComponent(session.user!.email!)}&token_id=${tokenId}`
+                : `${BACKEND}/api/my-pieces?email=${encodeURIComponent(session.user!.email!)}&token_id=${tokenId}`,
+            )
+              .then((r) => r.json())
+              .catch(() => null),
+            fetch(
+              IS_WEB
+                ? `/api/rarity?type=token&token_id=${tokenId}`
+                : `${BACKEND}/api/rarity?type=token&token_id=${tokenId}`,
+            )
               .then((r) => r.json())
               .catch(() => null),
           ]);
@@ -485,7 +497,7 @@ export default function ProfileScreen() {
                         <View style={s.cardFoot}>
                           <View>
                             <Text style={s.cardPrice}>
-                              ${(piece.amount / 100).toFixed(0)}
+                              ${piece.amount.toFixed(0)}
                             </Text>
                             <Text style={s.cardCurrency}>USD</Text>
                           </View>

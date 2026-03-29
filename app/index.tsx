@@ -2,6 +2,7 @@
 
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
+import { useVideoPlayer } from "expo-video";
 // Video: set VIDEO_URL below when ready to add hero video
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -227,10 +228,22 @@ export default function HomeScreen() {
   const { w, h, isPhone, isTablet, isWeb, isWebWide } = layout;
   const [menuOpen, setMenuOpen] = useState(false);
   const { session } = useAuth();
+  const VIDEO_SRC = null; // Set to require("../assets/hero-video.mp4") when asset is ready
+  const player = useVideoPlayer(VIDEO_SRC as any);
+
+  useEffect(() => {
+    if (!VIDEO_SRC || !player) return;
+    player.loop = true;
+    player.muted = true;
+    try {
+      player.play();
+    } catch (e) {
+      /* ignore */
+    }
+  }, [player]);
   const fade = useRef(new Animated.Value(0)).current;
   const slideY = useRef(new Animated.Value(24)).current;
   // Video hosted remotely — swap in your CDN/IPFS URL here
-  const VIDEO_URL = ""; // e.g. "https://your-cdn.com/hero-video.mp4"
 
   useEffect(() => {
     Animated.parallel([
