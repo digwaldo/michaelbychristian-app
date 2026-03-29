@@ -2,7 +2,6 @@
 
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { useVideoPlayer } from "expo-video";
 // Video: set VIDEO_URL below when ready to add hero video
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -52,7 +51,7 @@ const useClientLayout = () => {
 };
 
 interface BagItem {
-  src: string | null;
+  src: any;
   name: string;
   color: string;
 }
@@ -252,19 +251,7 @@ export default function HomeScreen() {
   const { w, h, isPhone, isTablet, isWeb, isWebWide } = layout;
   const [menuOpen, setMenuOpen] = useState(false);
   const { session } = useAuth();
-  const VIDEO_SRC = require("../assets/hero-video.mp4");
-  const player = useVideoPlayer(VIDEO_SRC as any);
 
-  useEffect(() => {
-    if (!VIDEO_SRC || !player) return;
-    player.loop = true;
-    player.muted = true;
-    try {
-      player.play();
-    } catch (e) {
-      /* ignore */
-    }
-  }, [player]);
   const fade = useRef(new Animated.Value(0)).current;
   const slideY = useRef(new Animated.Value(24)).current;
   // Video hosted remotely — swap in your CDN/IPFS URL here
@@ -380,7 +367,7 @@ export default function HomeScreen() {
         <View style={s.heroSection}>
           <View style={[s.heroFrame, { height: heroH, width: "100%" }]}>
             <View style={s.heroMedia}>
-              {/* Hero background — set VIDEO_URL to enable video */}
+              {/* Hero background */}
               <View style={[s.heroVideo, { backgroundColor: "#0C0B09" }]} />
             </View>
             <LinearGradient
@@ -582,7 +569,7 @@ export default function HomeScreen() {
                   <View style={s.bagImgWrap}>
                     {bag.src ? (
                       <Image
-                        source={{ uri: bag.src }}
+                        source={bag.src}
                         style={s.bagImg}
                         resizeMode="contain"
                       />
@@ -612,7 +599,7 @@ export default function HomeScreen() {
                   <View style={s.bagImgWrap}>
                     {bag.src ? (
                       <Image
-                        source={{ uri: bag.src }}
+                        source={bag.src}
                         style={s.bagImg}
                         resizeMode="contain"
                       />

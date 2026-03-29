@@ -320,8 +320,8 @@ export default function PieceScreen() {
         body: JSON.stringify({
           tokenId: String(tokenId),
           successUrl: IS_WEB
-            ? `${window.location.origin}/success?session_id={CHECKOUT_SESSION_ID}&token_id=${tokenId}`
-            : `${BACKEND}/success?session_id={CHECKOUT_SESSION_ID}&token_id=${tokenId}`,
+            ? `${window.location.origin}/success`
+            : `${BACKEND}/success`,
           cancelUrl: IS_WEB
             ? window.location.href
             : `${BACKEND}/piece/${tokenId}`,

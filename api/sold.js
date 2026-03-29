@@ -91,7 +91,7 @@ module.exports = async (req, res) => {
           const saleData = typeof raw === "string" ? JSON.parse(raw) : raw;
           if (!saleData.xlmPriceAtPurchase || !saleData.xlmEquivalent) continue;
 
-          const purchasePriceUSD = saleData.amount / 100;
+          const purchasePriceUSD = Number(saleData.amount); // stored as dollars
           const currentValueUSD = saleData.xlmEquivalent * currentXlmPrice;
           const gainPercent =
             ((currentValueUSD - purchasePriceUSD) / purchasePriceUSD) * 100;
