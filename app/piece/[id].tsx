@@ -18,11 +18,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
+  ADMIN_WALLET,
   BACKEND,
   C,
   CONTRACT,
+  EXPLORER,
   PASSPHRASE,
-  RPC_URL
+  RPC_URL,
 } from "../../lib/theme";
 
 const { width } = Dimensions.get("window");
@@ -72,7 +74,7 @@ async function loadTokenFromStellar(tokenId: number) {
       designer: f("designer"),
       image: raw.image || "",
       price: raw.price ? Number(raw.price) : 0,
-      listed: raw.listed !== false,
+      listed: raw.listed !== false, // true = still with admin = available
       // Edition
       edition_run: f("edition_run"),
       edition_number: f("edition_number"),
@@ -205,7 +207,14 @@ export default function PieceScreen() {
     setError(null);
     try {
       const res = await loadTokenFromStellar(tokenId);
-      setData(res.data);
+      // Cross-reference on-chain owner with listed flag
+      // If owner is not admin wallet → token has been transferred = sold
+      const onChainSold =
+        res.owner && res.owner.toUpperCase() !== ADMIN_WALLET.toUpperCase();
+      setData({
+        ...res.data,
+        listed: onChainSold ? false : res.data.listed,
+      });
       setOwner(res.owner);
       Animated.timing(fadeIn, {
         toValue: 1,
@@ -546,24 +555,54 @@ export default function PieceScreen() {
           <Text style={s.sectionLbl}>On-Chain Proof</Text>
           <View style={s.chainBox}>
             {[
-              { k: "Contract", v: short(CONTRACT), mono: true },
-              { k: "Token ID", v: `#${tokenId}`, gold: true },
-              { k: "Standard", v: "Soroban NFT", mono: false },
-              { k: "Network", v: "Stellar · Testnet", gold: true },
-              { k: "Owner", v: owner ? short(owner) : "Checking…", mono: true },
-            ].map(({ k, v, gold, mono }) => (
-              <View key={k} style={s.chainRow}>
+              {
+                k: "Contract",
+                v: short(CONTRACT),
+                mono: true,
+                link: `${EXPLORER}/contract/${CONTRACT}`,
+              },
+              { k: "Token ID", v: `#${tokenId}`, gold: true, link: null },
+              { k: "Standard", v: "Soroban NFT", mono: false, link: null },
+              {
+                k: "Network",
+                v:
+                  process.env.EXPO_PUBLIC_NETWORK === "MAINNET"
+                    ? "Stellar · Mainnet"
+                    : "Stellar · Testnet",
+                gold: true,
+                link: null,
+              },
+              {
+                k: "Owner",
+                v: owner ? short(owner) : "Checking…",
+                mono: true,
+                link: owner ? `${EXPLORER}/account/${owner}` : null,
+              },
+            ].map(({ k, v, gold, mono, link }) => (
+              <TouchableOpacity
+                key={k}
+                style={s.chainRow}
+                disabled={!link}
+                onPress={() => {
+                  if (!link) return;
+                  if (IS_WEB) window.open(link, "_blank");
+                  else Linking.openURL(link);
+                }}
+                activeOpacity={link ? 0.7 : 1}
+              >
                 <Text style={s.chainKey}>{k}</Text>
                 <Text
                   style={[
                     s.chainVal,
                     gold && { color: C.goldLt },
                     mono && { fontFamily: "monospace" },
+                    link && { color: C.gold, textDecorationLine: "underline" },
                   ]}
                 >
                   {v}
+                  {link ? " ↗" : ""}
                 </Text>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
 
