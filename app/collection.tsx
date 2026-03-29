@@ -400,8 +400,9 @@ export default function CollectionScreen() {
             const ownedByAdmin =
               !owner || owner.toUpperCase() === ADMIN_WALLET.toUpperCase();
             const soldInKV = kvSoldIds.has(i);
-            const isSold = !ownedByAdmin || soldInKV;
-            const isListed = raw?.listed !== false && ownedByAdmin && !soldInKV;
+            const ownerKnown = owner !== null;
+            const isSold = (ownerKnown && !ownedByAdmin) || soldInKV;
+            const isListed = raw?.listed !== false && !isSold;
 
             function f(key: string) {
               return t[key] || raw?.[key] || "";

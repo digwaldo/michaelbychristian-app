@@ -8,6 +8,19 @@
 const { Redis } = require("@upstash/redis");
 const { fetchXLMPrice } = require("./xlm-price");
 
+// ── KV key prefix — separates testnet and mainnet data ───────────────────────
+const ENV_PREFIX = (process.env.STELLAR_NETWORK_PASSPHRASE || "").includes(
+  "Test",
+)
+  ? "test"
+  : "prod";
+function soldKey(tokenId) {
+  return `${ENV_PREFIX}:sold:${tokenId}`;
+}
+function soldPattern() {
+  return `${ENV_PREFIX}:sold:*`;
+}
+
 const redis = new Redis({
   url: process.env.KV_REST_API_URL,
   token: process.env.KV_REST_API_TOKEN,
@@ -30,9 +43,9 @@ module.exports = async (req, res) => {
   // ── GET ?type=list — all sold token IDs ──────────────────────
   if (type === "list") {
     try {
-      const keys = await redis.keys("sold:*");
+      const keys = await redis.keys(soldPattern());
       const soldTokenIds = keys
-        .map((k) => Number(k.replace("sold:", "")))
+        .map((k) => Number(k.replace(`${ENV_PREFIX}:sold:`, "")))
         .filter((n) => !isNaN(n));
       return res.status(200).json({ soldTokenIds });
     } catch (err) {
@@ -45,7 +58,7 @@ module.exports = async (req, res) => {
   if (type === "check") {
     if (!token_id) return res.status(400).json({ error: "token_id required" });
     try {
-      const raw = await redis.get(`sold:${token_id}`);
+      const raw = await redis.get(soldKey(token_id));
       if (!raw) return res.status(200).json({ sold: false });
       const saleData = typeof raw === "string" ? JSON.parse(raw) : raw;
       return res.status(200).json({
@@ -65,7 +78,7 @@ module.exports = async (req, res) => {
   if (type === "gains") {
     try {
       const [keys, currentXlmPrice] = await Promise.all([
-        redis.keys("sold:*"),
+        redis.keys(soldPattern()),
         fetchXLMPrice(),
       ]);
 
@@ -84,7 +97,7 @@ module.exports = async (req, res) => {
             ((currentValueUSD - purchasePriceUSD) / purchasePriceUSD) * 100;
 
           if (gainPercent > 0) {
-            const tokenId = Number(key.replace("sold:", ""));
+            const tokenId = Number(key.replace(`${ENV_PREFIX}:sold:`, ""));
             gains[tokenId] = parseFloat(gainPercent.toFixed(1));
           }
         } catch {
@@ -116,7 +129,7 @@ module.exports.markTokenSold = async function ({
   xlmPriceBaseline,
 }) {
   await redis.set(
-    `sold:${tokenId}`,
+    soldKey(tokenId),
     JSON.stringify({
       soldAt: new Date().toISOString(),
       buyerEmail,
@@ -135,13 +148,13 @@ module.exports.markTokenSold = async function ({
 };
 
 module.exports.getTokenSaleData = async function (tokenId) {
-  const data = await redis.get(`sold:${tokenId}`);
+  const data = await redis.get(soldKey(tokenId));
   if (!data) return null;
   return typeof data === "string" ? JSON.parse(data) : data;
 };
 
 module.exports.isTokenSold = async function (tokenId) {
-  const data = await redis.get(`sold:${tokenId}`);
+  const data = await redis.get(soldKey(tokenId));
   return !!data;
 };
 
@@ -149,7 +162,7 @@ module.exports.markTokenClaimed = async function ({ tokenId, buyerWallet }) {
   const existing = await module.exports.getTokenSaleData(tokenId);
   if (!existing) throw new Error(`No sale data for token ${tokenId}`);
   await redis.set(
-    `sold:${tokenId}`,
+    soldKey(tokenId),
     JSON.stringify({
       ...existing,
       claimed: true,

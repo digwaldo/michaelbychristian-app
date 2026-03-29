@@ -12,6 +12,7 @@ const STELLAR_RPC =
   process.env.STELLAR_RPC_URL || "https://soroban-testnet.stellar.org";
 const STELLAR_PASSPHRASE =
   process.env.STELLAR_NETWORK_PASSPHRASE || "Test SDF Network ; September 2015";
+
 const ADMIN_SECRET = process.env.STELLAR_ADMIN_SECRET;
 const ADMIN_WALLET =
   process.env.STELLAR_ADMIN_WALLET ||
