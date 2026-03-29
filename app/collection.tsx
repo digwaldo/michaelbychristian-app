@@ -364,7 +364,11 @@ export default function CollectionScreen() {
       if (!isRefresh) setLoading(true);
       setError(null);
 
-      fetch(`${BACKEND}/api/sold?type=gains`)
+      fetch(
+        typeof window !== "undefined"
+          ? `/api/sold?type=gains`
+          : `${BACKEND}/api/sold?type=gains`,
+      )
         .then((r) => r.json())
         .then((d) => {
           if (d?.gains) setSoldGains(d.gains);
@@ -373,7 +377,11 @@ export default function CollectionScreen() {
 
       let kvSoldIds: Set<number> = new Set();
       try {
-        const soldRes = await fetch(`${BACKEND}/api/sold?type=list`);
+        const soldRes = await fetch(
+          typeof window !== "undefined"
+            ? `/api/sold?type=list`
+            : `${BACKEND}/api/sold?type=list`,
+        );
         const soldData = await soldRes.json();
         kvSoldIds = new Set(soldData.soldTokenIds || []);
       } catch (e) {
@@ -400,9 +408,8 @@ export default function CollectionScreen() {
             const ownedByAdmin =
               !owner || owner.toUpperCase() === ADMIN_WALLET.toUpperCase();
             const soldInKV = kvSoldIds.has(i);
-            const ownerKnown = owner !== null;
-            const isSold = (ownerKnown && !ownedByAdmin) || soldInKV;
-            const isListed = raw?.listed !== false && !isSold;
+            const isSold = !ownedByAdmin || soldInKV;
+            const isListed = raw?.listed !== false && ownedByAdmin && !soldInKV;
 
             function f(key: string) {
               return t[key] || raw?.[key] || "";
@@ -472,20 +479,25 @@ export default function CollectionScreen() {
         // ── Save computed rarity to KV in background ──────────
         // Piece pages read from here so they have accurate rank
         // without needing to load the full collection
-        fetch(`${BACKEND}/api/rarity`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            rarities: enriched.map((n) => ({
-              tokenId: n.tokenId,
-              rank: n.rarity_rank,
-              label: n.rarity_label,
-              score: n.rarity_score,
-              percentile: n.rarity_percentile,
-              traitCount: n.trait_count,
-            })),
-          }),
-        }).catch(() => null); // fire and forget — never block the UI
+        fetch(
+          typeof window !== "undefined"
+            ? `/api/rarity`
+            : `${BACKEND}/api/rarity`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              rarities: enriched.map((n) => ({
+                tokenId: n.tokenId,
+                rank: n.rarity_rank,
+                label: n.rarity_label,
+                score: n.rarity_score,
+                percentile: n.rarity_percentile,
+                traitCount: n.trait_count,
+              })),
+            }),
+          },
+        ).catch(() => null); // fire and forget — never block the UI
       } catch (e: any) {
         setError(e.message || "Could not connect to Stellar");
       } finally {
@@ -516,7 +528,7 @@ export default function CollectionScreen() {
       r = r.filter((n) => n.listed !== true);
     if (f.price.length) {
       r = r.filter((n) => {
-        const price = n.price / 100;
+        const price = n.price;
         return f.price.some((bucket) => {
           if (bucket === "under200") return price < 200;
           if (bucket === "200to300") return price >= 200 && price <= 300;
@@ -571,7 +583,7 @@ export default function CollectionScreen() {
     ].sort();
   }
 
-  const formatPrice = (p: number) => (p ? `$${(p / 100).toFixed(0)}` : "—");
+  const formatPrice = (p: number) => (p ? `$${Number(p).toFixed(0)}` : "—");
   const activeCount = Object.values(filters).flat().length;
 
   const silhouettes = getOptions("silhouette");

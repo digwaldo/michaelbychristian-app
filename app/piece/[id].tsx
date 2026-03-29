@@ -233,20 +233,23 @@ export default function PieceScreen() {
     setBuyStep("checking");
     setBuyError("");
     try {
-      const res = await fetch(`${BACKEND}/api/create-checkout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tokenId: String(tokenId),
-          buyerWallet: "",
-          successUrl: IS_WEB
-            ? `${window.location.origin}/success?session_id={CHECKOUT_SESSION_ID}&token_id=${tokenId}`
-            : `${BACKEND}/success?session_id={CHECKOUT_SESSION_ID}&token_id=${tokenId}`,
-          cancelUrl: IS_WEB
-            ? window.location.href
-            : `${BACKEND}/piece/${tokenId}`,
-        }),
-      });
+      const res = await fetch(
+        IS_WEB ? `/api/create-checkout` : `${BACKEND}/api/create-checkout`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tokenId: String(tokenId),
+            buyerWallet: "",
+            successUrl: IS_WEB
+              ? `${window.location.origin}/success?session_id={CHECKOUT_SESSION_ID}&token_id=${tokenId}`
+              : `${BACKEND}/success?session_id={CHECKOUT_SESSION_ID}&token_id=${tokenId}`,
+            cancelUrl: IS_WEB
+              ? window.location.href
+              : `${BACKEND}/piece/${tokenId}`,
+          }),
+        },
+      );
 
       const data = await res.json();
 

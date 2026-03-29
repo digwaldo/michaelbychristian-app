@@ -112,7 +112,7 @@ export function imgUrl(raw: string): string {
   return raw;
 }
 
-export function formatPrice(price_usdc: number): string {
-  if (!price_usdc) return "—";
-  return `$${(price_usdc / 100).toFixed(0)}`;
+export function formatPrice(price: number): string {
+  if (!price) return "—";
+  return `$${Number(price).toFixed(0)}`;
 }
