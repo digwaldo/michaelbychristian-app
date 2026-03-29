@@ -2,7 +2,7 @@
 
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { VideoView, useVideoPlayer } from "expo-video";
+// Video: set VIDEO_URL below when ready to add hero video
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -51,41 +51,18 @@ const useClientLayout = () => {
 };
 
 interface BagItem {
-  src: number;
+  src: string | null;
   name: string;
   color: string;
 }
+// Bag images loaded from IPFS/remote — no local assets needed
 const BAGS: BagItem[] = [
-  {
-    src: require("../assets/bags/bag1.png") as number,
-    name: "Prototype - Haven",
-    color: "White · Gold",
-  },
-  {
-    src: require("../assets/bags/bag2.png") as number,
-    name: "Prototype - Haven",
-    color: "Black · Gold",
-  },
-  {
-    src: require("../assets/bags/bag3.png") as number,
-    name: "Prototype - The Bride",
-    color: "Brown · Black",
-  },
-  {
-    src: require("../assets/bags/bag4.png") as number,
-    name: "Prototype - The Bride",
-    color: "Yellow · Red",
-  },
-  {
-    src: require("../assets/bags/bag5.png") as number,
-    name: "Prototype - The Bride",
-    color: "Red · Black",
-  },
-  {
-    src: require("../assets/bags/bag6.png") as number,
-    name: "Prototype - The Bride",
-    color: "Yellow · Black",
-  },
+  { src: null, name: "Prototype - Haven", color: "White · Gold" },
+  { src: null, name: "Prototype - Haven", color: "Black · Gold" },
+  { src: null, name: "Prototype - The Bride", color: "Brown · Black" },
+  { src: null, name: "Prototype - The Bride", color: "Yellow · Red" },
+  { src: null, name: "Prototype - The Bride", color: "Red · Black" },
+  { src: null, name: "Prototype - The Bride", color: "Yellow · Black" },
 ];
 
 const MARQUEE = [
@@ -252,20 +229,8 @@ export default function HomeScreen() {
   const { session } = useAuth();
   const fade = useRef(new Animated.Value(0)).current;
   const slideY = useRef(new Animated.Value(24)).current;
-  const player = useVideoPlayer(require("../assets/hero-video.mp4"));
-
-  useEffect(() => {
-    player.loop = true;
-    player.muted = true;
-    const start = async () => {
-      try {
-        player.play();
-      } catch (e) {
-        console.log("Video autoplay failed:", e);
-      }
-    };
-    start();
-  }, [player]);
+  // Video hosted remotely — swap in your CDN/IPFS URL here
+  const VIDEO_URL = ""; // e.g. "https://your-cdn.com/hero-video.mp4"
 
   useEffect(() => {
     Animated.parallel([
@@ -290,8 +255,14 @@ export default function HomeScreen() {
   const h2Size = isPhone ? 28 : 36;
   const maxW = isWeb ? 760 : undefined;
 
-  // ── NAV_LINKS — Production: index + rarity only ──────────────
-  const NAV_LINKS = [{ label: "Rarity", path: "/rarity", gold: true }];
+  // ── NAV_LINKS — Staging: all routes enabled ──────────────────
+  const NAV_LINKS = [
+    { label: "Collection", path: "/collection" },
+    { label: "Rarity", path: "/rarity", gold: true },
+    session
+      ? { label: "My Pieces", path: "/profile" }
+      : { label: "Sign In", path: "/auth" },
+  ];
 
   const COLS = isPhone ? 2 : 3;
 
@@ -372,14 +343,8 @@ export default function HomeScreen() {
         <View style={s.heroSection}>
           <View style={[s.heroFrame, { height: heroH, width: "100%" }]}>
             <View style={s.heroMedia}>
-              <VideoView
-                player={player}
-                style={s.heroVideo}
-                contentFit={isPhone ? "contain" : "cover"}
-                nativeControls={false}
-                allowsFullscreen={false}
-                startsPictureInPictureAutomatically={false}
-              />
+              {/* Hero background — set VIDEO_URL to enable video */}
+              <View style={[s.heroVideo, { backgroundColor: "#0C0B09" }]} />
             </View>
             <LinearGradient
               colors={
@@ -437,7 +402,7 @@ export default function HomeScreen() {
                   stitch signed on-chain.
                 </Text>
                 <View style={[s.ctaRow, isPhone && { marginTop: 20 }]}>
-                  {/*<TouchableOpacity
+                  <TouchableOpacity
                     style={[
                       s.btnWhite,
                       isPhone && { paddingHorizontal: 20, paddingVertical: 12 },
@@ -460,7 +425,7 @@ export default function HomeScreen() {
                     <Text style={[s.btnGhostTxt, isPhone && { fontSize: 9 }]}>
                       My Pieces
                     </Text>
-                  </TouchableOpacity>*/}
+                  </TouchableOpacity>
                 </View>
                 <View style={[s.chips, isPhone && { marginTop: 12 }]}>
                   {[
@@ -560,13 +525,13 @@ export default function HomeScreen() {
               Pay by card, Apple Pay, or Google Pay.{"\n"}No wallet needed — NFT
               delivered instantly.
             </Text>
-            {/*<TouchableOpacity
+            <TouchableOpacity
               style={s.btnGold}
               onPress={() => {}}
               activeOpacity={0.85}
             >
               <Text style={s.btnGoldTxt}>Browse All Pieces & Buy →</Text>
-            </TouchableOpacity>*/}
+            </TouchableOpacity>
           </View>
           <View style={[s.bagGrid, { paddingHorizontal: 2 }]}>
             <View style={s.bagRow}>
@@ -578,11 +543,17 @@ export default function HomeScreen() {
                   activeOpacity={0.88}
                 >
                   <View style={s.bagImgWrap}>
-                    <Image
-                      source={bag.src}
-                      style={s.bagImg}
-                      resizeMode="contain"
-                    />
+                    {bag.src ? (
+                      <Image
+                        source={{ uri: bag.src }}
+                        style={s.bagImg}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <View
+                        style={[s.bagImg, { backgroundColor: "#1A1916" }]}
+                      />
+                    )}
                   </View>
                   <View style={s.bagCardBody}>
                     <Text style={s.bagName} numberOfLines={1}>
@@ -602,11 +573,17 @@ export default function HomeScreen() {
                   activeOpacity={0.88}
                 >
                   <View style={s.bagImgWrap}>
-                    <Image
-                      source={bag.src}
-                      style={s.bagImg}
-                      resizeMode="contain"
-                    />
+                    {bag.src ? (
+                      <Image
+                        source={{ uri: bag.src }}
+                        style={s.bagImg}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <View
+                        style={[s.bagImg, { backgroundColor: "#1A1916" }]}
+                      />
+                    )}
                   </View>
                   <View style={s.bagCardBody}>
                     <Text style={s.bagName} numberOfLines={1}>
@@ -708,14 +685,14 @@ export default function HomeScreen() {
               </View>
             ))}
             <View style={s.callout}>
-              {/*<Text style={s.calloutTitle}>· Checkout the Collection ·</Text>
+              <Text style={s.calloutTitle}>· Checkout the Collection ·</Text>
               <TouchableOpacity
                 style={s.btnBorder}
                 onPress={() => {}}
                 activeOpacity={0.85}
               >
                 <Text style={s.btnBorderTxt}>Browse & Buy →</Text>
-              </TouchableOpacity>*/}
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1207,4 +1184,3 @@ const s = StyleSheet.create({
   },
   footerHandle: { fontSize: 10, color: C.muted },
 });
-// staging test
