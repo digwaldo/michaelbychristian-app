@@ -7,6 +7,26 @@ BigInt.prototype.toJSON = function () {
   return this.toString();
 };
 
+// Parse JSON body manually — Vercel doesn't always auto-parse for non-Next.js APIs
+async function parseBody(req) {
+  if (req.body && typeof req.body === "object") return req.body;
+  return new Promise((resolve, reject) => {
+    let data = "";
+    req.setEncoding("utf8");
+    req.on("data", (chunk) => {
+      data += chunk;
+    });
+    req.on("end", () => {
+      try {
+        resolve(JSON.parse(data || "{}"));
+      } catch (e) {
+        resolve({});
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
 const { isTokenSold } = require("./sold");
 const StellarSdk = require("@stellar/stellar-sdk");
 const {
@@ -51,7 +71,17 @@ async function simulate(fn, args = []) {
     .setTimeout(30)
     .build();
 
-  const sim = await server.simulateTransaction(tx);
+  // 15s timeout to prevent hanging serverless function
+  const sim = await Promise.race([
+    server.simulateTransaction(tx),
+    new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`Stellar RPC timeout for ${fn}`)),
+        15000,
+      ),
+    ),
+  ]);
+
   if (!rpc.Api.isSimulationSuccess(sim)) {
     const errDetail = JSON.stringify(sim, (_, v) =>
       typeof v === "bigint" ? v.toString() : v,
@@ -105,7 +135,7 @@ module.exports = async (req, res) => {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
   try {
-    const { tokenId, items, successUrl, cancelUrl } = req.body;
+    const { tokenId, items, successUrl, cancelUrl } = await parseBody(req);
 
     // Build normalized list of token IDs to purchase
     // Supports: single tokenId (string) OR items array [{tokenId, name, price, image}]
