@@ -21,9 +21,8 @@ import {
   BACKEND,
   C,
   CONTRACT,
-  EXPLORER,
   PASSPHRASE,
-  RPC_URL,
+  RPC_URL
 } from "../../lib/theme";
 
 const { width } = Dimensions.get("window");
@@ -53,15 +52,17 @@ async function loadTokenFromStellar(tokenId: number) {
   }
 
   const [raw, owner] = await Promise.all([
-    simulate("token_data", [Sdk.nativeToScVal(tokenId, { type: "u64" })]),
+    simulate("full_token_data", [Sdk.nativeToScVal(tokenId, { type: "u64" })]),
     simulate("owner_of", [Sdk.nativeToScVal(tokenId, { type: "u64" })]).catch(
       () => null,
     ),
   ]);
 
-  const t = raw.traits || {};
+  // New contract returns fields flat — no traits wrapper
+  // Old contract had traits nested — support both
+  const t = raw.traits || raw || {};
   function f(key: string) {
-    return t[key] || raw[key] || "";
+    return t[key] || raw?.[key] || "";
   }
   return {
     data: {
@@ -230,9 +231,11 @@ export default function PieceScreen() {
           tokenId: String(tokenId),
           buyerWallet: "",
           successUrl: IS_WEB
-            ? `${window.location.origin}/success.html`
-            : `${BACKEND}/success.html`,
-          cancelUrl: IS_WEB ? window.location.href : `${BACKEND}/`,
+            ? `${window.location.origin}/success?session_id={CHECKOUT_SESSION_ID}&token_id=${tokenId}`
+            : `${BACKEND}/success?session_id={CHECKOUT_SESSION_ID}&token_id=${tokenId}`,
+          cancelUrl: IS_WEB
+            ? window.location.href
+            : `${BACKEND}/piece/${tokenId}`,
         }),
       });
 
@@ -355,7 +358,7 @@ export default function PieceScreen() {
             <Image
               source={{ uri: imgUrl }}
               style={s.img}
-              resizeMode="cover"
+              resizeMode="contain"
               onError={() => setImgErr(true)}
             />
           ) : (
@@ -516,8 +519,8 @@ export default function PieceScreen() {
           <Text style={s.sectionLbl}>Traits & Details</Text>
           {TRAIT_GROUPS.map((group) => {
             const visibleTraits = group.traits.filter(([key]) => {
-              const val = data[key];
-              return val && val !== "" && val !== 0;
+              const val = (data as any)[key];
+              return val && String(val).trim() !== "" && val !== 0;
             });
             if (visibleTraits.length === 0) return null;
             return (
@@ -527,7 +530,9 @@ export default function PieceScreen() {
                   {visibleTraits.map(([key, label]) => (
                     <View key={key} style={s.traitRow}>
                       <Text style={s.traitKey}>{label}</Text>
-                      <Text style={s.traitVal}>{String(data[key])}</Text>
+                      <Text style={s.traitVal}>
+                        {String((data as any)[key])}
+                      </Text>
                     </View>
                   ))}
                 </View>
@@ -561,18 +566,6 @@ export default function PieceScreen() {
               </View>
             ))}
           </View>
-
-          <TouchableOpacity
-            style={s.explorerBtn}
-            activeOpacity={0.8}
-            onPress={() => {
-              const url = `${EXPLORER}/contract/${CONTRACT}`;
-              if (IS_WEB) window.open(url, "_blank");
-              else Linking.openURL(url);
-            }}
-          >
-            <Text style={s.explorerBtnTxt}>View on Stellar Explorer ↗</Text>
-          </TouchableOpacity>
 
           <View style={{ height: data.listed ? 100 : 48 }} />
         </View>
@@ -690,9 +683,10 @@ const s = StyleSheet.create({
 
   imgWrap: {
     width: "100%",
-    height: IMG_H,
+    aspectRatio: 1,
     backgroundColor: C.warm,
     overflow: "hidden",
+    maxHeight: IS_WEB ? 520 : width,
   },
   img: { width: "100%", height: "100%" },
   imgPlaceholder: {
