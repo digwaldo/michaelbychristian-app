@@ -58,12 +58,36 @@ interface BagItem {
 }
 // Bag images loaded from IPFS/remote — no local assets needed
 const BAGS: BagItem[] = [
-  { src: null, name: "Prototype - Haven", color: "White · Gold" },
-  { src: null, name: "Prototype - Haven", color: "Black · Gold" },
-  { src: null, name: "Prototype - The Bride", color: "Brown · Black" },
-  { src: null, name: "Prototype - The Bride", color: "Yellow · Red" },
-  { src: null, name: "Prototype - The Bride", color: "Red · Black" },
-  { src: null, name: "Prototype - The Bride", color: "Yellow · Black" },
+  {
+    src: require("../assets/bags/bag1.png"),
+    name: "Prototype - Haven",
+    color: "White · Gold",
+  },
+  {
+    src: require("../assets/bags/bag2.png"),
+    name: "Prototype - Haven",
+    color: "Black · Gold",
+  },
+  {
+    src: require("../assets/bags/bag3.png"),
+    name: "Prototype - The Bride",
+    color: "Brown · Black",
+  },
+  {
+    src: require("../assets/bags/bag4.png"),
+    name: "Prototype - The Bride",
+    color: "Yellow · Red",
+  },
+  {
+    src: require("../assets/bags/bag5.png"),
+    name: "Prototype - The Bride",
+    color: "Red · Black",
+  },
+  {
+    src: require("../assets/bags/bag6.png"),
+    name: "Prototype - The Bride",
+    color: "Yellow · Black",
+  },
 ];
 
 const MARQUEE = [
@@ -228,7 +252,7 @@ export default function HomeScreen() {
   const { w, h, isPhone, isTablet, isWeb, isWebWide } = layout;
   const [menuOpen, setMenuOpen] = useState(false);
   const { session } = useAuth();
-  const VIDEO_SRC = null; // Set to require("../assets/hero-video.mp4") when asset is ready
+  const VIDEO_SRC = require("../assets/hero-video.mp4");
   const player = useVideoPlayer(VIDEO_SRC as any);
 
   useEffect(() => {
