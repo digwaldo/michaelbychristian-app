@@ -1562,6 +1562,19 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   cartBtnTxt: { fontSize: 14, color: C.muted, lineHeight: 18 },
+  goToCartBtn: {
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 8,
+  },
+  goToCartBtnTxt: {
+    fontSize: 9,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: C.gold,
+  },
   inCartLabel: {
     fontSize: 8,
     letterSpacing: 1.5,

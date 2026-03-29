@@ -520,9 +520,18 @@ export default function PieceScreen() {
               </Text>
             </>
           ) : (
-            <View style={s.soldBtn}>
-              <Text style={s.soldBtnTxt}>This Piece Has Been Sold</Text>
-            </View>
+            <>
+              <View style={s.soldBtn}>
+                <Text style={s.soldBtnTxt}>This Piece Has Been Sold</Text>
+              </View>
+              <TouchableOpacity
+                style={s.continueShopping}
+                onPress={() => router.push("/collection" as any)}
+                activeOpacity={0.85}
+              >
+                <Text style={s.continueShoppingTxt}>← Browse Collection</Text>
+              </TouchableOpacity>
+            </>
           )}
 
           <View style={s.rule} />
@@ -633,20 +642,29 @@ export default function PieceScreen() {
                 </Text>
                 <Text style={s.stickyPrice}>{price} USD</Text>
               </View>
-              <TouchableOpacity
-                style={[s.stickyBtn, buyDisabled && s.stickyBtnDisabled]}
-                onPress={buyNFT}
-                disabled={buyDisabled}
-                activeOpacity={0.85}
-              >
-                {buyStep === "checking" || buyStep === "redirecting" ? (
-                  <ActivityIndicator color={C.black} size="small" />
-                ) : (
-                  <Text style={s.stickyBtnTxt}>
-                    {buyStep === "unavailable" ? "Unavailable" : "Buy Now"}
-                  </Text>
-                )}
-              </TouchableOpacity>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <TouchableOpacity
+                  style={s.viewCartBtn}
+                  onPress={() => router.push("/cart" as any)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={s.viewCartBtnTxt}>🛒 Cart</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.stickyBtn, buyDisabled && s.stickyBtnDisabled]}
+                  onPress={buyNFT}
+                  disabled={buyDisabled}
+                  activeOpacity={0.85}
+                >
+                  {buyStep === "checking" || buyStep === "redirecting" ? (
+                    <ActivityIndicator color={C.black} size="small" />
+                  ) : (
+                    <Text style={s.stickyBtnTxt}>
+                      {buyStep === "unavailable" ? "Unavailable" : "Buy Now"}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </SafeAreaView>
         </View>
@@ -913,6 +931,22 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.muted,
   },
+  continueShopping: { padding: 14, alignItems: "center", marginBottom: 10 },
+  continueShoppingTxt: {
+    fontSize: 10,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: C.muted,
+  },
+  viewCartBtn: {
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewCartBtnTxt: { fontSize: 10, color: C.cream, letterSpacing: 1 },
 
   rule: { height: 1, backgroundColor: C.border, marginVertical: 28 },
   sectionLbl: {
