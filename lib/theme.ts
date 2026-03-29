@@ -20,11 +20,23 @@ export const C = {
 export const BACKEND =
   process.env.EXPO_PUBLIC_BACKEND_URL ??
   "https://michaelbychristian-app.vercel.app";
+
 export const CONTRACT =
-  "CB7GCGWAHWCF3SAJTYCR7JEFINLJBKA3LV7BZNAI46OXYPYZSTFZ6EMB";
-export const RPC_URL = "https://soroban-testnet.stellar.org";
-export const NETWORK = "TESTNET";
-export const PASSPHRASE = "Test SDF Network ; September 2015";
-export const EXPLORER = "https://stellar.expert/explorer/testnet";
+  process.env.EXPO_PUBLIC_CONTRACT_ID ??
+  "CB7GCGWAHWCF3SAJTYCR7JEFINLJBKA3LV7BZNAI46OXYPYZSTFZ6EMB"; // testnet fallback
+
+export const RPC_URL =
+  process.env.EXPO_PUBLIC_RPC_URL ?? "https://soroban-testnet.stellar.org";
+
+export const PASSPHRASE =
+  process.env.EXPO_PUBLIC_NETWORK_PASSPHRASE ??
+  "Test SDF Network ; September 2015";
+
+export const NETWORK = process.env.EXPO_PUBLIC_NETWORK ?? "TESTNET";
+
+export const EXPLORER =
+  process.env.EXPO_PUBLIC_EXPLORER ?? "https://stellar.expert/explorer/testnet";
+
 export const ADMIN_WALLET =
+  process.env.EXPO_PUBLIC_ADMIN_WALLET ??
   "GB2GKZ22XFF5BZWRV6AIO7JLCDT7W36Y5DFIUWPENA5IIDEAH7FLXOA3";
