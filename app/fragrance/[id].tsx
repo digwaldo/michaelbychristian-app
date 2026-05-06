@@ -3,13 +3,13 @@
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import {
-    Linking,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Linking,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { C } from "../../lib/theme";
@@ -200,21 +200,23 @@ export default function FragranceDetailScreen() {
               </TouchableOpacity>
             </View>
             <TouchableOpacity
-              style={[s.buyBtn, { backgroundColor: f.accent }]}
+              style={s.ghostBtn}
               activeOpacity={0.85}
               onPress={() =>
                 Linking.openURL(
-                  "mailto:youngcompltd@gmail.com?subject=Order — " +
+                  "mailto:youngcompltd@gmail.com?subject=Fragrance Inquiry — " +
                     f.name +
                     " " +
                     vol +
-                    "ml",
+                    "ml" +
+                    "&body=Hi, I'm interested in purchasing " +
+                    f.name +
+                    " (" +
+                    vol +
+                    "ml). Please let me know availability and next steps.",
                 )
               }
             >
-              <Text style={s.buyBtnTxt}>Purchase · Authenticate On-Chain</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.ghostBtn} activeOpacity={0.85}>
               <Text style={s.ghostBtnTxt}>Inquire via Email →</Text>
             </TouchableOpacity>
           </View>
@@ -446,14 +448,6 @@ const s = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: "uppercase",
     color: C.muted,
-  },
-  buyBtn: { padding: 16, alignItems: "center", marginBottom: 10 },
-  buyBtnTxt: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 2.5,
-    textTransform: "uppercase",
-    color: C.black,
   },
   ghostBtn: {
     borderWidth: 0.5,
