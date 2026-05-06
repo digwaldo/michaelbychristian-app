@@ -1,4 +1,4 @@
-// app/_layout.tsx — Root layout with AuthProvider
+// app/_layout.tsx — Root layout (main branch)
 
 import { Stack } from "expo-router";
 import { AuthProvider } from "../context/AuthContext";
@@ -9,6 +9,8 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="rarity" />
+        <Stack.Screen name="fragrance" />
+        <Stack.Screen name="fragrance/[id]" />
         <Stack.Screen name="+not-found" />
       </Stack>
     </AuthProvider>

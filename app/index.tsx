@@ -291,7 +291,10 @@ export default function HomeScreen() {
   const maxW = isWeb ? 760 : undefined;
 
   // ── NAV_LINKS — Production: index + rarity only ──────────────
-  const NAV_LINKS = [{ label: "Rarity", path: "/rarity", gold: true }];
+  const NAV_LINKS = [
+    { label: "Rarity", path: "/rarity", gold: true },
+    { label: "Fragrances", path: "/fragrance", gold: true },
+  ];
 
   const COLS = isPhone ? 2 : 3;
 
