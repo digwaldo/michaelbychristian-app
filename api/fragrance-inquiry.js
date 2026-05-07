@@ -2,7 +2,7 @@
 // Handles fragrance inquiry form submissions — sends email via Resend
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const ADMIN_EMAIL = "youngcompltd@gmail.com";
+const ADMIN_EMAIL = "digwaldo@gmail.com"; // Resend verified address — update once domain is verified
 
 function setCORS(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -123,8 +123,13 @@ module.exports = async (req, res) => {
 
     const result = await response.json();
     if (!response.ok) {
-      console.error("Resend error:", result);
-      return res.status(500).json({ error: "Failed to send email" });
+      console.error("Resend error:", JSON.stringify(result));
+      console.error("Resend status:", response.status);
+      console.error("RESEND_API_KEY set:", !!RESEND_API_KEY);
+      return res.status(500).json({
+        error: "Failed to send email",
+        detail: result?.message || result?.name || JSON.stringify(result),
+      });
     }
 
     console.log(`Fragrance inquiry sent: ${name} <${email}> — ${fragrance}`);
