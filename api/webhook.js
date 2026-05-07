@@ -364,7 +364,7 @@ async function sendOwnerEmail({
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: "MBC Store <hello@mbcusa.co>",
+      from: "MBC Store <store@mbcusa.co>",
       to: ["youngcompltd@gmail.com"],
       subject,
       html,

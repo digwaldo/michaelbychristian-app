@@ -113,7 +113,7 @@ module.exports = async (req, res) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Michael Christian Fragrances <hello@mbcusa.co>",
+        from: "MBC Store <store@mbcusa.co>",
         to: [ADMIN_EMAIL],
         reply_to: email,
         subject: `Fragrance Inquiry — ${fragrance}${volume ? ` · ${volume}` : ""} · ${name}`,
