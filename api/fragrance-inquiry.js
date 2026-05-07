@@ -2,7 +2,7 @@
 // Handles fragrance inquiry form submissions — sends email via Resend
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const ADMIN_EMAIL = "digwaldo@gmail.com"; // Resend verified address — update once domain is verified
+const ADMIN_EMAIL = "youngcompltd@gmail.com";
 
 function setCORS(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -113,7 +113,7 @@ module.exports = async (req, res) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "MBC Fragrances <onboarding@resend.dev>",
+        from: "Michael Christian Fragrances <hello@mbcusa.co>",
         to: [ADMIN_EMAIL],
         reply_to: email,
         subject: `Fragrance Inquiry — ${fragrance}${volume ? ` · ${volume}` : ""} · ${name}`,

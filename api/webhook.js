@@ -66,6 +66,7 @@ async function transferNFT(tokenId, buyerWallet) {
   const STELLAR_PASSPHRASE =
     process.env.STELLAR_NETWORK_PASSPHRASE ||
     "Test SDF Network ; September 2015";
+
   const ADMIN_SECRET = process.env.STELLAR_ADMIN_SECRET;
 
   const adminKeypair = StellarSdk.Keypair.fromSecret(ADMIN_SECRET);
@@ -148,7 +149,7 @@ function buildItemRows(items) {
     <div style="padding:14px 20px;border-bottom:1px solid rgba(184,150,62,0.1);background:${i % 2 === 0 ? "#1A1916" : "#141210"};">
       <div style="margin-bottom:4px;">
         <span style="font-size:13px;color:#D4AF6A;font-weight:600;">${item.name}</span>
-        <span style="font-size:11px;color:#5BAF85;float:right;">$${(item.amount / 100).toFixed(0)} USD</span>
+        <span style="font-size:11px;color:#5BAF85;float:right;">$${item.amount.toFixed(0)} USD</span>
       </div>
       <span style="font-size:11px;color:#7A7060;">Token #${item.tokenId}</span>
       ${item.txHash ? `<span style="font-size:10px;color:#5BAF85;margin-left:10px;">✦ NFT Transferred</span>` : ""}
@@ -276,7 +277,7 @@ async function sendBuyerEmail({
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: "MBC Michael By Christian <onboarding@resend.dev>",
+      from: "MBC <orders@mbcusa.co>",
       to: [to],
       subject,
       html,
@@ -363,8 +364,8 @@ async function sendOwnerEmail({
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: "MBC Store <onboarding@resend.dev>",
-      to: ["digwaldo@gmail.com"],
+      from: "MBC Store <hello@mbcusa.co>",
+      to: ["youngcompltd@gmail.com"],
       subject,
       html,
     }),
@@ -417,9 +418,12 @@ module.exports = async (req, res) => {
 
   const buyerEmail = session.customer_details?.email;
   const buyerName = session.customer_details?.name;
-  const totalPaid = session.amount_total;
+  const totalPaid = session.amount_total; // Stripe returns cents
+  const totalDollars = Math.round(totalPaid / 100); // convert to dollars
   const perItemAmount =
-    tokenIds.length > 1 ? Math.round(totalPaid / tokenIds.length) : totalPaid;
+    tokenIds.length > 1
+      ? Math.round(totalDollars / tokenIds.length)
+      : totalDollars;
 
   // Build address strings
   let shippingAddress = null;
@@ -494,7 +498,7 @@ module.exports = async (req, res) => {
     const tid = tokenIds[idx];
     const itemName = bagNames[idx] || `MBC Token #${tid}`;
     const xlmEquivalent = xlmPriceAtPurchase
-      ? perItemAmount / 100 / xlmPriceAtPurchase
+      ? perItemAmount / xlmPriceAtPurchase
       : null;
     let txHash = null;
 
@@ -540,10 +544,10 @@ module.exports = async (req, res) => {
   }
 
   // ── Send emails ──────────────────────────────────────────────
-  const sendTo = buyerEmail || "digwaldo@gmail.com";
+  const sendTo = buyerEmail || "youngcompltd@gmail.com";
   try {
     await sendBuyerEmail({
-      to: "digwaldo@gmail.com",
+      to: sendTo,
       buyerName,
       items: soldItems,
       totalPaid,
