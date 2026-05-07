@@ -3,11 +3,13 @@
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import {
-  Linking,
+  ActivityIndicator,
+  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -96,6 +98,44 @@ export default function FragranceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const f = FRAGRANCES[id as string];
   const [vol, setVol] = useState<30 | 50>(30);
+  const [showForm, setShowForm] = useState(false);
+  const [formName, setFormName] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formPhone, setFormPhone] = useState("");
+  const [formMessage, setFormMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+
+  async function submitInquiry() {
+    if (!formName.trim() || !formEmail.trim()) {
+      setSubmitError("Name and email are required.");
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      const res = await fetch("/api/fragrance-inquiry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formName.trim(),
+          email: formEmail.trim(),
+          phone: formPhone.trim(),
+          fragrance: f.name,
+          volume: vol + "ml",
+          message: formMessage.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Submission failed");
+      setSubmitted(true);
+    } catch (e: any) {
+      setSubmitError(e.message || "Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   if (!f) {
     return (
@@ -199,26 +239,93 @@ export default function FragranceDetailScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={s.ghostBtn}
-              activeOpacity={0.85}
-              onPress={() =>
-                Linking.openURL(
-                  "mailto:youngcompltd@gmail.com?subject=Fragrance Inquiry — " +
-                    f.name +
-                    " " +
-                    vol +
-                    "ml" +
-                    "&body=Hi, I'm interested in purchasing " +
-                    f.name +
-                    " (" +
-                    vol +
-                    "ml). Please let me know availability and next steps.",
-                )
-              }
-            >
-              <Text style={s.ghostBtnTxt}>Inquire via Email →</Text>
-            </TouchableOpacity>
+            {!showForm ? (
+              <TouchableOpacity
+                style={s.ghostBtn}
+                activeOpacity={0.85}
+                onPress={() => setShowForm(true)}
+              >
+                <Text style={s.ghostBtnTxt}>Inquire via Email →</Text>
+              </TouchableOpacity>
+            ) : submitted ? (
+              <View style={s.successBox}>
+                <Text style={s.successIcon}>✦</Text>
+                <Text style={s.successTitle}>Inquiry Received</Text>
+                <Text style={s.successSub}>
+                  We'll be in touch at {formEmail} shortly.
+                </Text>
+              </View>
+            ) : (
+              <KeyboardAvoidingView
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
+              >
+                <View style={s.formBox}>
+                  <Text style={s.formTitle}>Fragrance Inquiry</Text>
+                  <Text style={s.formSub}>
+                    {f.name} · {vol}ml — we'll respond within 24 hours.
+                  </Text>
+
+                  <TextInput
+                    style={s.input}
+                    placeholder="Full Name *"
+                    placeholderTextColor={C.muted}
+                    value={formName}
+                    onChangeText={setFormName}
+                    autoCapitalize="words"
+                  />
+                  <TextInput
+                    style={s.input}
+                    placeholder="Email Address *"
+                    placeholderTextColor={C.muted}
+                    value={formEmail}
+                    onChangeText={setFormEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                  <TextInput
+                    style={s.input}
+                    placeholder="Phone (optional)"
+                    placeholderTextColor={C.muted}
+                    value={formPhone}
+                    onChangeText={setFormPhone}
+                    keyboardType="phone-pad"
+                  />
+                  <TextInput
+                    style={[s.input, s.inputMulti]}
+                    placeholder="Message (optional)"
+                    placeholderTextColor={C.muted}
+                    value={formMessage}
+                    onChangeText={setFormMessage}
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                  />
+
+                  {submitError ? (
+                    <Text style={s.errorTxt}>{submitError}</Text>
+                  ) : null}
+
+                  <TouchableOpacity
+                    style={[s.submitBtn, submitting && { opacity: 0.6 }]}
+                    onPress={submitInquiry}
+                    disabled={submitting}
+                    activeOpacity={0.85}
+                  >
+                    {submitting ? (
+                      <ActivityIndicator color={C.black} size="small" />
+                    ) : (
+                      <Text style={s.submitBtnTxt}>Send Inquiry →</Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setShowForm(false)}
+                    style={{ marginTop: 10, alignItems: "center" }}
+                  >
+                    <Text style={s.cancelTxt}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </KeyboardAvoidingView>
+            )}
           </View>
 
           {/* NFC strip */}
@@ -460,6 +567,65 @@ const s = StyleSheet.create({
     letterSpacing: 2,
     textTransform: "uppercase",
     color: C.muted,
+  },
+
+  formBox: {
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 20,
+    backgroundColor: C.charcoal,
+    marginBottom: 4,
+  },
+  formTitle: {
+    fontFamily: "serif",
+    fontSize: 18,
+    fontWeight: "700",
+    color: C.cream,
+    marginBottom: 4,
+  },
+  formSub: { fontSize: 11, color: C.muted, marginBottom: 20, lineHeight: 18 },
+  input: {
+    borderWidth: 0.5,
+    borderColor: C.border,
+    backgroundColor: C.warm,
+    color: C.cream,
+    fontSize: 13,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
+  },
+  inputMulti: { minHeight: 80, paddingTop: 12 },
+  errorTxt: { fontSize: 11, color: "#C0614A", marginBottom: 10 },
+  submitBtn: { backgroundColor: C.gold, padding: 14, alignItems: "center" },
+  submitBtnTxt: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: C.black,
+  },
+  cancelTxt: { fontSize: 10, color: C.muted, letterSpacing: 1 },
+
+  successBox: {
+    borderWidth: 1,
+    borderColor: "rgba(91,175,133,0.4)",
+    backgroundColor: "rgba(91,175,133,0.06)",
+    padding: 24,
+    alignItems: "center",
+  },
+  successIcon: { fontSize: 24, color: C.green, marginBottom: 8 },
+  successTitle: {
+    fontFamily: "serif",
+    fontSize: 18,
+    fontWeight: "700",
+    color: C.cream,
+    marginBottom: 6,
+  },
+  successSub: {
+    fontSize: 12,
+    color: C.muted,
+    textAlign: "center",
+    lineHeight: 18,
   },
 
   nfcStrip: {
