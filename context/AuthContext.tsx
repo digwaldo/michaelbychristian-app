@@ -5,6 +5,7 @@ import { Session, User } from "@supabase/supabase-js";
 import { makeRedirectUri } from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { Platform } from "react-native";
 import { supabase } from "../lib/supabase";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -145,14 +146,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function signInWithGoogle() {
     try {
-      const redirectTo = makeRedirectUri({ scheme: "michaelbychristian" });
+      const isWeb = Platform.OS === "web";
 
+      if (isWeb) {
+        // Web: use full page redirect — Supabase handles the callback
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo: `${window.location.origin}/profile`,
+          },
+        });
+        if (error) return { error: error.message };
+        return { error: null };
+      }
+
+      // Native: use WebBrowser flow
+      const redirectTo = makeRedirectUri({ scheme: "michaelbychristian" });
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true,
-        },
+        options: { redirectTo, skipBrowserRedirect: true },
       });
 
       if (error) return { error: error.message };
@@ -164,14 +176,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
 
       if (result.type === "success" && result.url) {
-        const url = new URL(result.url);
+        const params = new URL(result.url);
         const accessToken =
-          url.searchParams.get("access_token") ??
-          url.hash.match(/access_token=([^&]+)/)?.[1];
+          params.searchParams.get("access_token") ??
+          result.url.match(/access_token=([^&]+)/)?.[1];
         const refreshToken =
-          url.searchParams.get("refresh_token") ??
-          url.hash.match(/refresh_token=([^&]+)/)?.[1];
-
+          params.searchParams.get("refresh_token") ??
+          result.url.match(/refresh_token=([^&]+)/)?.[1];
         if (accessToken && refreshToken) {
           await supabase.auth.setSession({
             access_token: accessToken,
