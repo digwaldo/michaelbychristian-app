@@ -1,22 +1,33 @@
-// app/fragrance.tsx — Michael Christian Fragrances collection
+// app/fragrance.tsx — Michael Christian Fragrances collection (light theme)
 
 import { router } from "expo-router";
 import React from "react";
 import {
-    Dimensions,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { C } from "../lib/theme";
 
 const IS_WEB = Platform.OS === "web";
-const { width } = Dimensions.get("window");
 const MAX_W = IS_WEB ? 760 : undefined;
+
+const T = {
+  bg: "#FFFFFF",
+  bgAlt: "#F8F6F2",
+  bgDeep: "#F2EFE9",
+  border: "#E8E4DC",
+  text: "#1A1814",
+  textSub: "#6B6458",
+  textMuted: "#9A9088",
+  gold: "#B8963E",
+  greenBg: "#EEF7F2",
+  greenBorder: "#A8D4BC",
+  green: "#2D7A52",
+};
 
 const FRAGRANCES = [
   {
@@ -31,8 +42,8 @@ const FRAGRANCES = [
     baseNotes: "White Musk · Clean Skin · Ambrette",
     price30: 185,
     price50: 265,
-    accent: C.goldLt,
-    available: true,
+    accent: "#B8963E",
+    bottleBg: "#FBF7EE",
   },
   {
     id: "aladdin",
@@ -46,8 +57,8 @@ const FRAGRANCES = [
     baseNotes: "Sandalwood · Amber · Dark Musk · Vetiver",
     price30: 195,
     price50: 285,
-    accent: "#C0614A",
-    available: true,
+    accent: "#8C4A2A",
+    bottleBg: "#FDF5F0",
   },
   {
     id: "homme-parfum",
@@ -61,8 +72,8 @@ const FRAGRANCES = [
     baseNotes: "Cedarwood · Sandalwood · White Musk · Oakmoss",
     price30: 195,
     price50: 285,
-    accent: C.silver,
-    available: true,
+    accent: "#4A5C6B",
+    bottleBg: "#F0F4F7",
   },
 ];
 
@@ -84,9 +95,9 @@ export default function FragranceScreen() {
           >
             <Text style={s.backTxt}>← Back</Text>
           </TouchableOpacity>
-          <View style={{ alignItems: "center" }}>
-            <Text style={s.topEye}>Michael By Christian</Text>
-          </View>
+          <Text style={s.topLogo}>
+            Michael <Text style={s.topLogoEm}>By Christian</Text>
+          </Text>
           <View style={{ width: 60 }} />
         </View>
       </SafeAreaView>
@@ -100,7 +111,7 @@ export default function FragranceScreen() {
               : {},
           ]}
         >
-          {/* Hero */}
+          {/* Hero header */}
           <View style={s.hero}>
             <Text style={s.heroEye}>Michael Christian Fragrances</Text>
             <Text style={s.heroTitle}>
@@ -116,7 +127,7 @@ export default function FragranceScreen() {
           <View style={s.rule} />
 
           {/* Fragrance cards */}
-          {FRAGRANCES.map((f, idx) => (
+          {FRAGRANCES.map((f) => (
             <TouchableOpacity
               key={f.id}
               style={s.card}
@@ -129,65 +140,98 @@ export default function FragranceScreen() {
               activeOpacity={0.88}
             >
               {/* Bottle visual */}
-              <View style={[s.bottleWrap, { borderColor: f.accent + "33" }]}>
-                <View style={[s.bottleCap, { backgroundColor: f.accent }]} />
-                <View
-                  style={[s.bottleNeck, { borderColor: f.accent + "66" }]}
-                />
-                <View style={[s.bottleBody, { borderColor: f.accent + "55" }]}>
-                  <Text style={[s.bottleName, { color: f.accent }]}>
-                    {f.name}
-                  </Text>
-                  <Text style={s.bottleBrand}>MBC</Text>
+              <View style={[s.bottleWrap, { backgroundColor: f.bottleBg }]}>
+                <View style={s.bottleInner}>
+                  <View style={[s.bottleCap, { backgroundColor: f.accent }]} />
+                  <View
+                    style={[s.bottleNeck, { borderColor: f.accent + "55" }]}
+                  />
+                  <View
+                    style={[s.bottleBody, { borderColor: f.accent + "44" }]}
+                  >
+                    <View
+                      style={[
+                        s.liquidFill,
+                        {
+                          backgroundColor: f.accent + "18",
+                          height: "55%" as any,
+                        },
+                      ]}
+                    />
+                    <Text style={[s.bottleName, { color: f.accent }]}>
+                      {f.name}
+                    </Text>
+                    <Text style={s.bottleBrand}>MBC</Text>
+                  </View>
                 </View>
+                <Text style={[s.bottleNumber, { color: f.accent }]}>
+                  {f.number}
+                </Text>
               </View>
 
-              {/* Info */}
+              {/* Card info */}
               <View style={s.cardInfo}>
-                <Text style={s.cardNumber}>{f.number}</Text>
-                <Text style={s.cardName}>{f.name}</Text>
-                <Text style={s.cardType}>{f.type}</Text>
-                <Text style={s.cardDesc} numberOfLines={3}>
+                <View style={s.cardHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.cardName}>{f.name}</Text>
+                    <Text style={s.cardType}>
+                      {f.type} · {f.concentration}
+                    </Text>
+                  </View>
+                  <View style={[s.cardArrow, { borderColor: f.accent }]}>
+                    <Text style={[s.cardArrowTxt, { color: f.accent }]}>→</Text>
+                  </View>
+                </View>
+
+                <Text style={s.cardDesc} numberOfLines={2}>
                   {f.desc}
                 </Text>
 
-                {/* Notes preview */}
-                <View style={s.notesPreview}>
-                  <View style={s.noteRow}>
-                    <Text style={s.noteLabel}>Top</Text>
-                    <Text style={s.noteVal} numberOfLines={1}>
-                      {f.topNotes}
-                    </Text>
-                  </View>
-                  <View style={s.noteRow}>
-                    <Text style={s.noteLabel}>Heart</Text>
-                    <Text style={s.noteVal} numberOfLines={1}>
-                      {f.heartNotes}
-                    </Text>
-                  </View>
-                  <View style={s.noteRow}>
-                    <Text style={s.noteLabel}>Base</Text>
-                    <Text style={s.noteVal} numberOfLines={1}>
-                      {f.baseNotes}
-                    </Text>
-                  </View>
+                {/* Notes */}
+                <View style={s.notesBox}>
+                  {[
+                    { label: "Top", val: f.topNotes },
+                    { label: "Heart", val: f.heartNotes },
+                    { label: "Base", val: f.baseNotes },
+                  ].map((note) => (
+                    <View key={note.label} style={s.noteRow}>
+                      <Text style={[s.noteLabel, { color: f.accent }]}>
+                        {note.label}
+                      </Text>
+                      <Text style={s.noteVal} numberOfLines={1}>
+                        {note.val}
+                      </Text>
+                    </View>
+                  ))}
                 </View>
 
-                {/* Price + CTA */}
+                {/* Price row */}
                 <View style={s.cardFoot}>
                   <View>
-                    <Text style={s.cardPrice}>From ${f.price30}</Text>
-                    <Text style={s.cardPriceSub}>USD · 30 or 50 ml</Text>
+                    <Text style={[s.cardPrice, { color: f.accent }]}>
+                      From ${f.price30}
+                    </Text>
+                    <Text style={s.cardPriceSub}>30 ml or 50 ml</Text>
                   </View>
-                  <View style={s.cardBtn}>
-                    <Text style={s.cardBtnTxt}>View →</Text>
+                  <View
+                    style={[
+                      s.inquireTag,
+                      {
+                        borderColor: f.accent,
+                        backgroundColor: f.accent + "0D",
+                      },
+                    ]}
+                  >
+                    <Text style={[s.inquireTagTxt, { color: f.accent }]}>
+                      Inquire →
+                    </Text>
                   </View>
                 </View>
               </View>
             </TouchableOpacity>
           ))}
 
-          {/* NFC strip */}
+          {/* NFC footer */}
           <View style={s.nfcStrip}>
             <View style={s.nfcDot} />
             <View style={{ flex: 1 }}>
@@ -210,11 +254,11 @@ export default function FragranceScreen() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.black },
+  root: { flex: 1, backgroundColor: T.bg },
   topBar: {
-    backgroundColor: C.charcoal,
+    backgroundColor: T.bg,
     borderBottomWidth: 1,
-    borderBottomColor: C.border,
+    borderBottomColor: T.border,
   },
   topBarInner: {
     flexDirection: "row",
@@ -223,13 +267,14 @@ const s = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
-  backTxt: { fontSize: 11, color: C.muted, letterSpacing: 0.5 },
-  topEye: {
-    fontSize: 8,
-    letterSpacing: 3,
-    textTransform: "uppercase",
-    color: C.gold,
+  backTxt: { fontSize: 11, color: T.textSub },
+  topLogo: {
+    fontFamily: "serif",
+    fontSize: 15,
+    fontWeight: "700",
+    color: T.text,
   },
+  topLogoEm: { fontStyle: "italic", fontWeight: "400", color: T.gold },
 
   content: { paddingHorizontal: 20 },
 
@@ -238,95 +283,121 @@ const s = StyleSheet.create({
     fontSize: 8,
     letterSpacing: 4,
     textTransform: "uppercase",
-    color: C.gold,
+    color: T.gold,
     marginBottom: 12,
   },
   heroTitle: {
     fontFamily: "serif",
     fontSize: 36,
     fontWeight: "900",
-    color: C.cream,
+    color: T.text,
     lineHeight: 38,
     marginBottom: 14,
   },
-  heroTitleEm: { fontStyle: "italic", fontWeight: "400", color: C.goldLt },
-  heroSub: { fontSize: 13, color: C.muted, lineHeight: 22 },
+  heroTitleEm: { fontStyle: "italic", fontWeight: "400", color: T.gold },
+  heroSub: { fontSize: 13, color: T.textSub, lineHeight: 22 },
 
-  rule: { height: 1, backgroundColor: C.border, marginBottom: 24 },
+  rule: { height: 1, backgroundColor: T.border, marginBottom: 24 },
 
   card: {
     borderWidth: 1,
-    borderColor: C.border,
-    backgroundColor: C.charcoal,
+    borderColor: T.border,
+    backgroundColor: T.bg,
     marginBottom: 16,
     overflow: "hidden",
   },
+
   bottleWrap: {
-    backgroundColor: "#0C0B09",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 32,
     borderBottomWidth: 1,
+    borderBottomColor: T.border,
   },
-  bottleCap: { width: 36, height: 10, borderRadius: 2, marginBottom: 0 },
+  bottleInner: { alignItems: "center" },
+  bottleCap: { width: 36, height: 10, borderRadius: 2 },
   bottleNeck: {
     width: 26,
     height: 24,
     borderWidth: 1,
     borderBottomWidth: 0,
     borderRadius: 2,
+    backgroundColor: "transparent",
   },
   bottleBody: {
     width: 70,
     height: 110,
     borderWidth: 1,
     borderRadius: 4,
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "flex-end",
-    paddingBottom: 14,
-    backgroundColor: "rgba(212,175,106,0.04)",
+    paddingBottom: 12,
+    position: "relative",
+    backgroundColor: "transparent",
   },
+  liquidFill: { position: "absolute", bottom: 0, left: 0, right: 0 },
   bottleName: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: "serif",
     fontStyle: "italic",
     letterSpacing: 1,
+    zIndex: 1,
   },
   bottleBrand: {
     fontSize: 6,
     letterSpacing: 3,
     textTransform: "uppercase",
-    color: C.muted,
+    color: T.textMuted,
     marginTop: 2,
+    zIndex: 1,
   },
-
-  cardInfo: { padding: 20 },
-  cardNumber: {
+  bottleNumber: {
     fontSize: 8,
     letterSpacing: 3,
     textTransform: "uppercase",
-    color: C.gold,
-    marginBottom: 4,
+    marginTop: 12,
+    fontWeight: "600",
+  },
+
+  cardInfo: { padding: 20 },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 10,
   },
   cardName: {
     fontFamily: "serif",
     fontSize: 22,
     fontWeight: "900",
-    color: C.cream,
-    marginBottom: 4,
+    color: T.text,
+    marginBottom: 3,
   },
   cardType: {
-    fontSize: 10,
+    fontSize: 9,
     letterSpacing: 1.5,
     textTransform: "uppercase",
-    color: C.muted,
-    marginBottom: 12,
+    color: T.textSub,
   },
-  cardDesc: { fontSize: 13, color: C.muted, lineHeight: 20, marginBottom: 16 },
-
-  notesPreview: {
+  cardArrow: {
+    width: 34,
+    height: 34,
     borderWidth: 1,
-    borderColor: C.border,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+  },
+  cardArrowTxt: { fontSize: 16, fontWeight: "300" },
+  cardDesc: {
+    fontSize: 13,
+    color: T.textSub,
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+
+  notesBox: {
+    borderWidth: 1,
+    borderColor: T.border,
     marginBottom: 16,
     overflow: "hidden",
   },
@@ -336,41 +407,36 @@ const s = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: C.border,
+    borderBottomColor: T.border,
   },
   noteLabel: {
     fontSize: 8,
     letterSpacing: 2,
     textTransform: "uppercase",
-    color: C.gold,
     width: 36,
     marginRight: 8,
+    fontWeight: "600",
   },
-  noteVal: { fontSize: 11, color: C.cream, flex: 1 },
+  noteVal: { fontSize: 11, color: T.text, flex: 1 },
 
   cardFoot: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  cardPrice: {
-    fontFamily: "serif",
-    fontSize: 20,
-    fontWeight: "700",
-    color: C.goldLt,
-  },
-  cardPriceSub: { fontSize: 9, letterSpacing: 1, color: C.muted, marginTop: 2 },
-  cardBtn: {
-    backgroundColor: C.gold,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
-  cardBtnTxt: {
+  cardPrice: { fontFamily: "serif", fontSize: 20, fontWeight: "700" },
+  cardPriceSub: {
     fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 2,
+    letterSpacing: 1,
+    color: T.textMuted,
+    marginTop: 2,
+  },
+  inquireTag: { borderWidth: 1, paddingHorizontal: 16, paddingVertical: 8 },
+  inquireTagTxt: {
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: 1.5,
     textTransform: "uppercase",
-    color: C.black,
   },
 
   nfcStrip: {
@@ -379,23 +445,23 @@ const s = StyleSheet.create({
     gap: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: "rgba(91,175,133,0.3)",
-    backgroundColor: "rgba(91,175,133,0.06)",
+    borderColor: T.greenBorder,
+    backgroundColor: T.greenBg,
     marginBottom: 8,
   },
   nfcDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: C.green,
+    backgroundColor: T.green,
     marginTop: 4,
     flexShrink: 0,
   },
   nfcTitle: {
     fontSize: 11,
-    color: C.green,
+    color: T.green,
     fontWeight: "600",
     marginBottom: 4,
   },
-  nfcSub: { fontSize: 11, color: C.muted, lineHeight: 18 },
+  nfcSub: { fontSize: 11, color: T.textSub, lineHeight: 18 },
 });

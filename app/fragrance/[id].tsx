@@ -1,4 +1,4 @@
-// app/fragrance/[id].tsx — Individual fragrance detail page
+// app/fragrance/[id].tsx — Individual fragrance detail page (light theme)
 
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
@@ -14,10 +14,26 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { C } from "../../lib/theme";
 
 const IS_WEB = Platform.OS === "web";
-const MAX_W = IS_WEB ? 760 : undefined;
+const MAX_W = IS_WEB ? 680 : undefined;
+
+// Light theme tokens — no dependency on C (dark theme)
+const T = {
+  bg: "#FFFFFF",
+  bgAlt: "#F8F6F2",
+  bgDeep: "#F2EFE9",
+  border: "#E8E4DC",
+  borderDark: "#D4CFC6",
+  text: "#1A1814",
+  textSub: "#6B6458",
+  textMuted: "#9A9088",
+  gold: "#B8963E",
+  greenBg: "#EEF7F2",
+  greenBorder: "#A8D4BC",
+  green: "#2D7A52",
+  red: "#B84040",
+};
 
 const FRAGRANCES: Record<string, any> = {
   "sweet-veil": {
@@ -41,8 +57,8 @@ const FRAGRANCES: Record<string, any> = {
     projection: "Moderate · Skin close",
     longevity: "6–8 hours",
     season: "Spring · Summer",
-    accent: C.goldLt,
-    accentRaw: "#D4AF6A",
+    accent: "#B8963E",
+    bottleBg: "#FBF7EE",
   },
   aladdin: {
     name: "Aladdin",
@@ -65,8 +81,8 @@ const FRAGRANCES: Record<string, any> = {
     projection: "Strong · Projects well",
     longevity: "8–12 hours",
     season: "Fall · Winter",
-    accent: "#C0614A",
-    accentRaw: "#C0614A",
+    accent: "#8C4A2A",
+    bottleBg: "#FDF5F0",
   },
   "homme-parfum": {
     name: "Homme Parfum",
@@ -89,8 +105,8 @@ const FRAGRANCES: Record<string, any> = {
     projection: "Moderate · Versatile",
     longevity: "7–10 hours",
     season: "All seasons",
-    accent: C.silver,
-    accentRaw: "#9A8E7A",
+    accent: "#4A5C6B",
+    bottleBg: "#F0F4F7",
   },
 };
 
@@ -128,7 +144,8 @@ export default function FragranceDetailScreen() {
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Submission failed");
+      if (!res.ok)
+        throw new Error(json.detail || json.error || "Submission failed");
       setSubmitted(true);
     } catch (e: any) {
       setSubmitError(e.message || "Something went wrong. Please try again.");
@@ -167,21 +184,94 @@ export default function FragranceDetailScreen() {
           >
             <Text style={s.backTxt}>← Fragrances</Text>
           </TouchableOpacity>
-          <Text style={s.topEye}>Michael By Christian</Text>
+          <Text style={s.topLogo}>
+            Michael <Text style={s.topLogoEm}>By Christian</Text>
+          </Text>
           <View style={{ width: 80 }} />
         </View>
       </SafeAreaView>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Bottle hero */}
-        <View style={[s.heroWrap, { borderBottomColor: f.accentRaw + "33" }]}>
-          <View style={s.bottleScene}>
-            <View style={[s.bottleCap, { backgroundColor: f.accent }]} />
-            <View style={[s.bottleNeck, { borderColor: f.accentRaw + "55" }]} />
-            <View style={[s.bottleBody, { borderColor: f.accentRaw + "44" }]}>
-              <Text style={[s.bottleName, { color: f.accent }]}>{f.name}</Text>
-              <Text style={s.bottleBrand}>MBC · {f.number}</Text>
+        {/* Hero — bottle + info */}
+        <View style={[s.hero, IS_WEB && { flexDirection: "row" }]}>
+          {/* Bottle panel */}
+          <View style={s.bottlePanel}>
+            <View style={s.bottleScene}>
+              <View style={[s.bottleCap, { backgroundColor: f.accent }]} />
+              <View style={[s.bottleNeck, { borderColor: f.accent + "55" }]} />
+              <View style={[s.bottleBody, { borderColor: f.accent + "44" }]}>
+                <View
+                  style={[
+                    s.liquidFill,
+                    {
+                      backgroundColor: f.accent + "1A",
+                      height: `${vol === 50 ? 72 : 52}%` as any,
+                    },
+                  ]}
+                />
+                <View style={s.bottleLabelWrap}>
+                  <Text style={[s.bottleLabelName, { color: f.accent }]}>
+                    {f.name}
+                  </Text>
+                  <Text style={s.bottleLabelBrand}>MBC · {f.number}</Text>
+                </View>
+              </View>
             </View>
+            <Text style={s.bottleVolTxt}>{vol} ml</Text>
+          </View>
+
+          {/* Info panel */}
+          <View style={s.infoPanel}>
+            <Text style={[s.heroNumber, { color: f.accent }]}>{f.number}</Text>
+            <Text style={s.heroTitle}>{f.name}</Text>
+            <Text style={s.heroType}>{f.type}</Text>
+            <Text style={s.heroDesc}>{f.desc}</Text>
+
+            <View style={s.priceRow}>
+              <Text style={[s.price, { color: f.accent }]}>${price}</Text>
+              <Text style={s.priceSub}>USD · {f.concentration}</Text>
+            </View>
+
+            <View style={s.volRow}>
+              {([30, 50] as const).map((v) => (
+                <TouchableOpacity
+                  key={v}
+                  style={[
+                    s.volBtn,
+                    vol === v && {
+                      borderColor: f.accent,
+                      backgroundColor: f.accent + "0D",
+                    },
+                  ]}
+                  onPress={() => setVol(v)}
+                >
+                  <Text style={[s.volBtnTxt, vol === v && { color: f.accent }]}>
+                    {v} ml
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {!showForm && !submitted && (
+              <TouchableOpacity
+                style={[s.inquireBtn, { backgroundColor: f.accent }]}
+                onPress={() => setShowForm(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={s.inquireBtnTxt}>Inquire via Email →</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* NFC strip */}
+        <View style={s.nfcStrip}>
+          <View style={s.nfcDot} />
+          <View style={{ flex: 1 }}>
+            <Text style={s.nfcTitle}>✦ NFC Authentication Embedded</Text>
+            <Text style={s.nfcSub}>
+              Tap bottle cap to verify provenance on Stellar blockchain
+            </Text>
           </View>
         </View>
 
@@ -193,170 +283,127 @@ export default function FragranceDetailScreen() {
               : {},
           ]}
         >
-          {/* Title block */}
-          <View style={s.titleBlock}>
-            <Text style={s.eyebrow}>
-              Michael Christian Fragrances · {f.number}
-            </Text>
-            <Text style={s.title}>{f.name}</Text>
-            <Text style={s.type}>{f.type}</Text>
-            <Text style={s.desc}>{f.desc}</Text>
-          </View>
-
-          {/* Volume + price */}
-          <View style={s.purchaseBlock}>
-            <View style={s.priceRow}>
-              <Text style={s.price}>${price}</Text>
-              <Text style={s.priceSub}>USD · {f.concentration}</Text>
-            </View>
-            <View style={s.volRow}>
-              <TouchableOpacity
-                style={[
-                  s.volBtn,
-                  vol === 30 && {
-                    borderColor: f.accentRaw,
-                    backgroundColor: f.accentRaw + "11",
-                  },
-                ]}
-                onPress={() => setVol(30)}
-              >
-                <Text style={[s.volBtnTxt, vol === 30 && { color: f.accent }]}>
-                  30 ml
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  s.volBtn,
-                  vol === 50 && {
-                    borderColor: f.accentRaw,
-                    backgroundColor: f.accentRaw + "11",
-                  },
-                ]}
-                onPress={() => setVol(50)}
-              >
-                <Text style={[s.volBtnTxt, vol === 50 && { color: f.accent }]}>
-                  50 ml
-                </Text>
-              </TouchableOpacity>
-            </View>
-            {!showForm ? (
-              <TouchableOpacity
-                style={s.ghostBtn}
-                activeOpacity={0.85}
-                onPress={() => setShowForm(true)}
-              >
-                <Text style={s.ghostBtnTxt}>Inquire via Email →</Text>
-              </TouchableOpacity>
-            ) : submitted ? (
-              <View style={s.successBox}>
-                <Text style={s.successIcon}>✦</Text>
-                <Text style={s.successTitle}>Inquiry Received</Text>
-                <Text style={s.successSub}>
-                  We'll be in touch at {formEmail} shortly.
-                </Text>
-              </View>
-            ) : (
-              <KeyboardAvoidingView
-                behavior={Platform.OS === "ios" ? "padding" : undefined}
-              >
-                <View style={s.formBox}>
-                  <Text style={s.formTitle}>Fragrance Inquiry</Text>
-                  <Text style={s.formSub}>
-                    {f.name} · {vol}ml — we'll respond within 24 hours.
+          {/* Inquiry form */}
+          {(showForm || submitted) && (
+            <View style={s.formSection}>
+              {submitted ? (
+                <View style={s.successBox}>
+                  <Text style={s.successIcon}>✦</Text>
+                  <Text style={s.successTitle}>Inquiry Received</Text>
+                  <Text style={s.successSub}>
+                    We'll be in touch at {formEmail} within 24 hours.
                   </Text>
-
-                  <TextInput
-                    style={s.input}
-                    placeholder="Full Name *"
-                    placeholderTextColor={C.muted}
-                    value={formName}
-                    onChangeText={setFormName}
-                    autoCapitalize="words"
-                  />
-                  <TextInput
-                    style={s.input}
-                    placeholder="Email Address *"
-                    placeholderTextColor={C.muted}
-                    value={formEmail}
-                    onChangeText={setFormEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
-                  <TextInput
-                    style={s.input}
-                    placeholder="Phone (optional)"
-                    placeholderTextColor={C.muted}
-                    value={formPhone}
-                    onChangeText={setFormPhone}
-                    keyboardType="phone-pad"
-                  />
-                  <TextInput
-                    style={[s.input, s.inputMulti]}
-                    placeholder="Message (optional)"
-                    placeholderTextColor={C.muted}
-                    value={formMessage}
-                    onChangeText={setFormMessage}
-                    multiline
-                    numberOfLines={3}
-                    textAlignVertical="top"
-                  />
-
-                  {submitError ? (
-                    <Text style={s.errorTxt}>{submitError}</Text>
-                  ) : null}
-
-                  <TouchableOpacity
-                    style={[s.submitBtn, submitting && { opacity: 0.6 }]}
-                    onPress={submitInquiry}
-                    disabled={submitting}
-                    activeOpacity={0.85}
-                  >
-                    {submitting ? (
-                      <ActivityIndicator color={C.black} size="small" />
-                    ) : (
-                      <Text style={s.submitBtnTxt}>Send Inquiry →</Text>
-                    )}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => setShowForm(false)}
-                    style={{ marginTop: 10, alignItems: "center" }}
-                  >
-                    <Text style={s.cancelTxt}>Cancel</Text>
-                  </TouchableOpacity>
                 </View>
-              </KeyboardAvoidingView>
-            )}
-          </View>
+              ) : (
+                <KeyboardAvoidingView
+                  behavior={Platform.OS === "ios" ? "padding" : undefined}
+                >
+                  <View style={s.formBox}>
+                    <Text style={s.formTitle}>
+                      {f.name} · {vol}ml Inquiry
+                    </Text>
+                    <Text style={s.formSub}>
+                      Fill out the form and we'll respond within 24 hours.
+                    </Text>
 
-          {/* NFC strip */}
-          <View style={s.nfcStrip}>
-            <View style={s.nfcDot} />
-            <View style={{ flex: 1 }}>
-              <Text style={s.nfcTitle}>✦ NFC Authentication Embedded</Text>
-              <Text style={s.nfcSub}>
-                Tap bottle cap to verify provenance on Stellar blockchain
-              </Text>
+                    <Text style={s.inputLabel}>Full Name *</Text>
+                    <TextInput
+                      style={s.input}
+                      placeholder="Your name"
+                      placeholderTextColor={T.textMuted}
+                      value={formName}
+                      onChangeText={setFormName}
+                      autoCapitalize="words"
+                    />
+
+                    <Text style={s.inputLabel}>Email Address *</Text>
+                    <TextInput
+                      style={s.input}
+                      placeholder="your@email.com"
+                      placeholderTextColor={T.textMuted}
+                      value={formEmail}
+                      onChangeText={setFormEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                    />
+
+                    <Text style={s.inputLabel}>Phone (optional)</Text>
+                    <TextInput
+                      style={s.input}
+                      placeholder="+1 (000) 000-0000"
+                      placeholderTextColor={T.textMuted}
+                      value={formPhone}
+                      onChangeText={setFormPhone}
+                      keyboardType="phone-pad"
+                    />
+
+                    <Text style={s.inputLabel}>Message (optional)</Text>
+                    <TextInput
+                      style={[s.input, s.inputMulti]}
+                      placeholder="Any questions or special requests..."
+                      placeholderTextColor={T.textMuted}
+                      value={formMessage}
+                      onChangeText={setFormMessage}
+                      multiline
+                      numberOfLines={3}
+                      textAlignVertical="top"
+                    />
+
+                    {submitError ? (
+                      <Text style={s.errorTxt}>{submitError}</Text>
+                    ) : null}
+
+                    <TouchableOpacity
+                      style={[
+                        s.submitBtn,
+                        { backgroundColor: f.accent },
+                        submitting && { opacity: 0.6 },
+                      ]}
+                      onPress={submitInquiry}
+                      disabled={submitting}
+                      activeOpacity={0.85}
+                    >
+                      {submitting ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Text style={s.submitBtnTxt}>Send Inquiry →</Text>
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setShowForm(false)}
+                      style={s.cancelWrap}
+                    >
+                      <Text style={s.cancelTxt}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                </KeyboardAvoidingView>
+              )}
             </View>
-          </View>
+          )}
 
           <View style={s.rule} />
 
           {/* Olfactory pyramid */}
-          <Text style={s.sectionLbl}>Olfactory Composition</Text>
+          <Text style={[s.sectionLbl, { color: f.accent }]}>
+            Olfactory Composition
+          </Text>
           <View style={s.pyramidBox}>
             {[
               {
-                tier: "Top Notes · 0–30 min",
+                tier: "Top Notes",
+                timing: "0–30 min",
                 notes: f.topNotes,
                 duration: f.topDuration,
               },
               {
-                tier: "Heart Notes · 30 min–3 hrs",
+                tier: "Heart Notes",
+                timing: "30 min–3 hrs",
                 notes: f.heartNotes,
                 duration: f.heartDuration,
               },
               {
-                tier: "Base Notes · 3+ hrs",
+                tier: "Base Notes",
+                timing: "3+ hrs",
                 notes: f.baseNotes,
                 duration: f.baseDuration,
               },
@@ -365,20 +412,25 @@ export default function FragranceDetailScreen() {
                 key={i}
                 style={[
                   s.noteCard,
-                  i < 2 && {
-                    borderBottomWidth: 1,
-                    borderBottomColor: C.border,
-                  },
+                  !IS_WEB &&
+                    i < 2 && {
+                      borderBottomWidth: 1,
+                      borderBottomColor: T.border,
+                    },
+                  IS_WEB && i === 2 && { borderRightWidth: 0 },
                 ]}
               >
-                <Text style={s.noteTier}>{note.tier}</Text>
+                <View style={s.noteTierRow}>
+                  <Text style={s.noteTier}>{note.tier}</Text>
+                  <Text style={s.noteTiming}>{note.timing}</Text>
+                </View>
                 <Text style={s.noteNotes}>{note.notes}</Text>
                 <View style={s.durationBar}>
                   <View
                     style={[
                       s.durationFill,
                       {
-                        width: `${note.duration}%` as any,
+                        width: (note.duration + "%") as any,
                         backgroundColor: f.accent,
                       },
                     ]}
@@ -391,7 +443,9 @@ export default function FragranceDetailScreen() {
           <View style={s.rule} />
 
           {/* Details */}
-          <Text style={s.sectionLbl}>Provenance & Details</Text>
+          <Text style={[s.sectionLbl, { color: f.accent }]}>
+            Provenance & Details
+          </Text>
           <View style={s.detailsBox}>
             {[
               ["Concentration", f.concentration],
@@ -409,12 +463,52 @@ export default function FragranceDetailScreen() {
                 key={i}
                 style={[
                   s.detailRow,
-                  i % 2 === 0 && { backgroundColor: C.warm },
+                  i % 2 !== 0 && { backgroundColor: T.bgAlt },
                 ]}
               >
                 <Text style={s.detailKey}>{key}</Text>
                 <Text style={s.detailVal}>{val}</Text>
               </View>
+            ))}
+          </View>
+
+          {/* Other fragrances */}
+          <View style={s.rule} />
+          <Text style={[s.sectionLbl, { color: f.accent }]}>
+            The Collection
+          </Text>
+          <View style={s.collectionRow}>
+            {Object.entries(FRAGRANCES).map(([key, frag]: [string, any]) => (
+              <TouchableOpacity
+                key={key}
+                style={[
+                  s.collCard,
+                  frag.name === f.name && { borderColor: f.accent },
+                ]}
+                onPress={() =>
+                  frag.name !== f.name &&
+                  router.push({
+                    pathname: "/fragrance/[id]",
+                    params: { id: key },
+                  } as any)
+                }
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    s.collName,
+                    frag.name === f.name && { color: f.accent },
+                  ]}
+                >
+                  {frag.name}
+                </Text>
+                <Text style={s.collType} numberOfLines={1}>
+                  {frag.type}
+                </Text>
+                <Text style={[s.collPrice, { color: frag.accent }]}>
+                  From ${frag.price30}
+                </Text>
+              </TouchableOpacity>
             ))}
           </View>
 
@@ -426,21 +520,21 @@ export default function FragranceDetailScreen() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.black },
+  root: { flex: 1, backgroundColor: T.bg },
   screen: {
     flex: 1,
-    backgroundColor: C.black,
+    backgroundColor: T.bg,
     alignItems: "center",
     justifyContent: "center",
     padding: 32,
   },
-  errTitle: { fontSize: 16, color: C.cream, marginBottom: 12 },
-  backLink: { fontSize: 12, color: C.muted },
+  errTitle: { fontSize: 16, color: T.text, marginBottom: 12 },
+  backLink: { fontSize: 12, color: T.textSub },
 
   topBar: {
-    backgroundColor: C.charcoal,
+    backgroundColor: T.bg,
     borderBottomWidth: 1,
-    borderBottomColor: C.border,
+    borderBottomColor: T.border,
   },
   topBarInner: {
     flexDirection: "row",
@@ -449,20 +543,27 @@ const s = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
-  backTxt: { fontSize: 11, color: C.muted, letterSpacing: 0.5 },
-  topEye: {
-    fontSize: 8,
-    letterSpacing: 3,
-    textTransform: "uppercase",
-    color: C.gold,
+  backTxt: { fontSize: 11, color: T.textSub },
+  topLogo: {
+    fontFamily: "serif",
+    fontSize: 15,
+    fontWeight: "700",
+    color: T.text,
   },
+  topLogoEm: { fontStyle: "italic", fontWeight: "400", color: T.gold },
 
-  heroWrap: {
-    backgroundColor: "#0C0B09",
+  hero: {
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+    flexDirection: IS_WEB ? "row" : "column",
+  },
+  bottlePanel: {
+    width: IS_WEB ? "45%" : "100%",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 52,
-    borderBottomWidth: 1,
+    minHeight: IS_WEB ? 380 : 260,
+    backgroundColor: "#0C0B09",
   },
   bottleScene: { alignItems: "center" },
   bottleCap: { width: 40, height: 12, borderRadius: 2 },
@@ -472,160 +573,115 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderBottomWidth: 0,
     borderRadius: 2,
+    backgroundColor: "rgba(212,175,106,0.08)",
   },
   bottleBody: {
     width: 80,
-    height: 130,
+    height: 140,
     borderWidth: 1,
-    borderRadius: 4,
+    borderRadius: 6,
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "flex-end",
-    paddingBottom: 16,
+    paddingBottom: 12,
+    position: "relative",
     backgroundColor: "rgba(212,175,106,0.04)",
   },
-  bottleName: {
-    fontSize: 11,
+  liquidFill: { position: "absolute", bottom: 0, left: 0, right: 0 },
+  bottleLabelWrap: { alignItems: "center", zIndex: 1 },
+  bottleLabelName: {
+    fontSize: 10,
     fontFamily: "serif",
     fontStyle: "italic",
     letterSpacing: 1,
   },
-  bottleBrand: {
-    fontSize: 7,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: C.muted,
-    marginTop: 3,
-  },
-
-  content: { paddingHorizontal: 24 },
-
-  titleBlock: { paddingTop: 28, paddingBottom: 24 },
-  eyebrow: {
-    fontSize: 8,
+  bottleLabelBrand: {
+    fontSize: 6,
     letterSpacing: 3,
     textTransform: "uppercase",
-    color: C.gold,
-    marginBottom: 10,
+    color: "rgba(212,175,106,0.5)",
+    marginTop: 2,
   },
-  title: {
-    fontFamily: "serif",
-    fontSize: 32,
-    fontWeight: "900",
-    color: C.cream,
-    marginBottom: 4,
-  },
-  type: {
-    fontSize: 10,
-    letterSpacing: 2,
+  bottleVolTxt: {
+    fontSize: 9,
+    letterSpacing: 3,
     textTransform: "uppercase",
-    color: C.muted,
-    marginBottom: 16,
+    marginTop: 16,
+    fontWeight: "600",
+    color: "rgba(212,175,106,0.7)",
   },
-  desc: { fontSize: 13, color: C.muted, lineHeight: 22 },
 
-  purchaseBlock: { marginBottom: 20 },
+  infoPanel: {
+    flex: 1,
+    padding: IS_WEB ? 40 : 24,
+    paddingTop: IS_WEB ? 36 : 20,
+    backgroundColor: T.bg,
+    justifyContent: "center",
+  },
+  heroNumber: {
+    fontSize: 9,
+    letterSpacing: 3,
+    textTransform: "uppercase",
+    marginBottom: 8,
+    fontWeight: "600",
+  },
+  heroTitle: {
+    fontFamily: "serif",
+    fontSize: 30,
+    fontWeight: "900",
+    color: T.text,
+    marginBottom: 4,
+    lineHeight: 32,
+  },
+  heroType: {
+    fontFamily: "serif",
+    fontStyle: "italic",
+    fontSize: 14,
+    color: T.gold,
+    marginBottom: 14,
+  },
+  heroDesc: {
+    fontSize: 13,
+    color: T.textSub,
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+
   priceRow: {
     flexDirection: "row",
     alignItems: "baseline",
-    gap: 10,
+    gap: 8,
     marginBottom: 16,
   },
-  price: {
-    fontFamily: "serif",
-    fontSize: 32,
-    fontWeight: "700",
-    color: C.goldLt,
-  },
+  price: { fontFamily: "serif", fontSize: 28, fontWeight: "700" },
   priceSub: {
     fontSize: 9,
-    letterSpacing: 2,
+    letterSpacing: 1,
     textTransform: "uppercase",
-    color: C.muted,
+    color: T.textMuted,
   },
-  volRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
+
+  volRow: { flexDirection: "row", gap: 8, marginBottom: 20 },
   volBtn: {
     paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderWidth: 0.5,
-    borderColor: C.border,
-    borderRadius: 2,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: T.border,
   },
   volBtnTxt: {
     fontSize: 10,
     letterSpacing: 1.5,
     textTransform: "uppercase",
-    color: C.muted,
-  },
-  ghostBtn: {
-    borderWidth: 0.5,
-    borderColor: C.border,
-    padding: 14,
-    alignItems: "center",
-  },
-  ghostBtnTxt: {
-    fontSize: 10,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: C.muted,
+    color: T.textSub,
   },
 
-  formBox: {
-    borderWidth: 1,
-    borderColor: C.border,
-    padding: 20,
-    backgroundColor: C.charcoal,
-    marginBottom: 4,
-  },
-  formTitle: {
-    fontFamily: "serif",
-    fontSize: 18,
-    fontWeight: "700",
-    color: C.cream,
-    marginBottom: 4,
-  },
-  formSub: { fontSize: 11, color: C.muted, marginBottom: 20, lineHeight: 18 },
-  input: {
-    borderWidth: 0.5,
-    borderColor: C.border,
-    backgroundColor: C.warm,
-    color: C.cream,
-    fontSize: 13,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 10,
-  },
-  inputMulti: { minHeight: 80, paddingTop: 12 },
-  errorTxt: { fontSize: 11, color: "#C0614A", marginBottom: 10 },
-  submitBtn: { backgroundColor: C.gold, padding: 14, alignItems: "center" },
-  submitBtnTxt: {
+  inquireBtn: { padding: 14, alignItems: "center" },
+  inquireBtnTxt: {
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 2,
     textTransform: "uppercase",
-    color: C.black,
-  },
-  cancelTxt: { fontSize: 10, color: C.muted, letterSpacing: 1 },
-
-  successBox: {
-    borderWidth: 1,
-    borderColor: "rgba(91,175,133,0.4)",
-    backgroundColor: "rgba(91,175,133,0.06)",
-    padding: 24,
-    alignItems: "center",
-  },
-  successIcon: { fontSize: 24, color: C.green, marginBottom: 8 },
-  successTitle: {
-    fontFamily: "serif",
-    fontSize: 18,
-    fontWeight: "700",
-    color: C.cream,
-    marginBottom: 6,
-  },
-  successSub: {
-    fontSize: 12,
-    color: C.muted,
-    textAlign: "center",
-    lineHeight: 18,
+    color: "#fff",
   },
 
   nfcStrip: {
@@ -633,75 +689,182 @@ const s = StyleSheet.create({
     alignItems: "flex-start",
     gap: 12,
     padding: 14,
-    borderWidth: 1,
-    borderColor: "rgba(91,175,133,0.3)",
-    backgroundColor: "rgba(91,175,133,0.06)",
-    marginBottom: 24,
+    backgroundColor: T.greenBg,
+    borderBottomWidth: 1,
+    borderBottomColor: T.greenBorder,
   },
   nfcDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: C.green,
+    backgroundColor: T.green,
     marginTop: 3,
     flexShrink: 0,
   },
   nfcTitle: {
     fontSize: 11,
-    color: C.green,
+    color: T.green,
     fontWeight: "600",
     marginBottom: 2,
   },
-  nfcSub: { fontSize: 10, color: C.muted },
+  nfcSub: { fontSize: 10, color: T.textSub },
 
-  rule: { height: 1, backgroundColor: C.border, marginBottom: 24 },
+  content: { paddingHorizontal: 24 },
+
+  formSection: { paddingTop: 28 },
+  formBox: {
+    borderWidth: 1,
+    borderColor: T.border,
+    padding: 24,
+    backgroundColor: T.bgAlt,
+    marginBottom: 4,
+  },
+  formTitle: {
+    fontFamily: "serif",
+    fontSize: 18,
+    fontWeight: "700",
+    color: T.text,
+    marginBottom: 4,
+  },
+  formSub: { fontSize: 12, color: T.textSub, marginBottom: 20, lineHeight: 18 },
+  inputLabel: {
+    fontSize: 9,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: T.textSub,
+    marginBottom: 6,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: T.border,
+    backgroundColor: T.bg,
+    color: T.text,
+    fontSize: 13,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  inputMulti: { minHeight: 80, paddingTop: 12 },
+  errorTxt: { fontSize: 11, color: T.red, marginBottom: 10 },
+  submitBtn: { padding: 14, alignItems: "center", marginBottom: 10 },
+  submitBtnTxt: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: "#fff",
+  },
+  cancelWrap: { alignItems: "center", paddingVertical: 8 },
+  cancelTxt: { fontSize: 10, color: T.textMuted, letterSpacing: 1 },
+
+  successBox: {
+    borderWidth: 1,
+    borderColor: T.greenBorder,
+    backgroundColor: T.greenBg,
+    padding: 28,
+    alignItems: "center",
+  },
+  successIcon: { fontSize: 24, color: T.green, marginBottom: 8 },
+  successTitle: {
+    fontFamily: "serif",
+    fontSize: 18,
+    fontWeight: "700",
+    color: T.text,
+    marginBottom: 6,
+  },
+  successSub: {
+    fontSize: 12,
+    color: T.textSub,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+
+  rule: { height: 1, backgroundColor: T.border, marginVertical: 28 },
   sectionLbl: {
     fontSize: 9,
     letterSpacing: 3.5,
     textTransform: "uppercase",
-    color: C.gold,
     marginBottom: 16,
     fontWeight: "600",
   },
 
   pyramidBox: {
+    flexDirection: IS_WEB ? "row" : "column",
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: T.border,
     overflow: "hidden",
-    marginBottom: 4,
   },
-  noteCard: { padding: 16, backgroundColor: C.charcoal },
+  noteCard: {
+    flex: IS_WEB ? 1 : undefined,
+    padding: 18,
+    backgroundColor: T.bg,
+    borderRightWidth: IS_WEB ? 1 : 0,
+    borderRightColor: T.border,
+  },
+  noteTierRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
   noteTier: {
-    fontSize: 8,
-    letterSpacing: 2,
+    fontSize: 9,
+    letterSpacing: 1.5,
     textTransform: "uppercase",
-    color: C.muted,
-    marginBottom: 6,
+    color: T.textSub,
+    fontWeight: "600",
   },
-  noteNotes: { fontSize: 13, color: C.cream, marginBottom: 10 },
-  durationBar: { height: 2, backgroundColor: C.warm },
+  noteTiming: { fontSize: 9, color: T.textMuted },
+  noteNotes: { fontSize: 13, color: T.text, marginBottom: 12, lineHeight: 20 },
+  durationBar: { height: 2, backgroundColor: T.bgDeep },
   durationFill: { height: 2 },
 
   detailsBox: {
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: T.border,
     overflow: "hidden",
-    marginBottom: 4,
+    flexDirection: "row",
+    flexWrap: "wrap",
   },
   detailRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 11,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: C.border,
+    borderBottomColor: T.border,
+    backgroundColor: T.bg,
+    width: IS_WEB ? "50%" : "100%",
   },
   detailKey: {
     fontSize: 9,
     letterSpacing: 1,
     textTransform: "uppercase",
-    color: C.muted,
+    color: T.textSub,
   },
-  detailVal: { fontSize: 12, color: C.cream, fontWeight: "500" },
+  detailVal: { fontSize: 12, color: T.text, fontWeight: "500" },
+
+  collectionRow: { flexDirection: "row", gap: 10 },
+  collCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: T.border,
+    padding: 14,
+    backgroundColor: T.bgAlt,
+  },
+  collName: {
+    fontFamily: "serif",
+    fontSize: 13,
+    fontWeight: "700",
+    color: T.text,
+    marginBottom: 3,
+  },
+  collType: {
+    fontSize: 8,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: T.textMuted,
+    marginBottom: 8,
+  },
+  collPrice: { fontSize: 12, fontWeight: "600" },
 });
