@@ -281,8 +281,8 @@ export default function HomeScreen() {
 
   // ── NAV_LINKS — main branch ──────────────────────────────────
   const NAV_LINKS = [
-    { label: "Rarity", path: "/rarity" },
     { label: "Fragrances", path: "/fragrance", gold: true },
+    { label: "Rarity", path: "/rarity" },
     session
       ? { label: "My Profile", path: "/profile" }
       : { label: "Sign In", path: "/auth" },
