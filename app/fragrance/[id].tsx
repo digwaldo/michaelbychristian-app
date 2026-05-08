@@ -1,4 +1,4 @@
-// app/fragrance/[id].tsx — Individual fragrance detail page (light theme)
+// app/fragrance/[id].tsx — Fragrance detail page (light theme)
 
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
@@ -16,15 +16,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const IS_WEB = Platform.OS === "web";
-const MAX_W = IS_WEB ? 680 : undefined;
 
-// Light theme tokens — no dependency on C (dark theme)
 const T = {
   bg: "#FFFFFF",
   bgAlt: "#F8F6F2",
   bgDeep: "#F2EFE9",
   border: "#E8E4DC",
-  borderDark: "#D4CFC6",
   text: "#1A1814",
   textSub: "#6B6458",
   textMuted: "#9A9088",
@@ -40,7 +37,8 @@ const FRAGRANCES: Record<string, any> = {
     name: "Sweet Veil",
     number: "No. 01",
     type: "Transparent Floral",
-    concentration: "Parfum · 22%",
+    subtitle: "2026 — Édition Limitée",
+    concentration: "Parfum · 30%",
     scentFamily: "Floral",
     desc: "A luminous transparent floral anchored by Hedione and pale rose. Opens like morning light through linen, dries to a whisper of white musk and clean skin. Luminous. Intimate. Unmistakably feminine.",
     topNotes: "Bergamot · Pink Pepper · Aldehydes",
@@ -49,22 +47,23 @@ const FRAGRANCES: Record<string, any> = {
     topDuration: 35,
     heartDuration: 65,
     baseDuration: 90,
-    price30: 185,
-    price50: 265,
-    edition: "Limited · 50 bottles",
+    price30: 225,
+    price50: 325,
+    edition: "Artisan Made · Limited 50 bottles",
     batch: "SV-2026-E1",
     origin: "Baltimore, MD · USA",
     projection: "Moderate · Skin close",
     longevity: "6–8 hours",
     season: "Spring · Summer",
+    finish: "Polished Crystal",
     accent: "#B8963E",
-    bottleBg: "#FBF7EE",
   },
   aladdin: {
     name: "Aladdin",
     number: "No. 02",
     type: "Oriental Woody Floral",
-    concentration: "Eau de Parfum · 18%",
+    subtitle: "2026 — Édition Limitée",
+    concentration: "Eau de Parfum · 30%",
     scentFamily: "Oriental",
     desc: "A rich, enveloping oriental built on oud, rose, and dark woods. Smoky and sensual with a saffron heart — a piece of the ancient Silk Road in every spray. Bold. Opulent. Unforgettable.",
     topNotes: "Saffron · Cardamom · Bergamot",
@@ -75,20 +74,21 @@ const FRAGRANCES: Record<string, any> = {
     baseDuration: 95,
     price30: 195,
     price50: 285,
-    edition: "Limited · 40 bottles",
+    edition: "Artisan Made · Limited 40 bottles",
     batch: "ALD-2026-E1",
     origin: "Baltimore, MD · USA",
     projection: "Strong · Projects well",
     longevity: "8–12 hours",
     season: "Fall · Winter",
+    finish: "Polished Crystal",
     accent: "#8C4A2A",
-    bottleBg: "#FDF5F0",
   },
   "homme-parfum": {
     name: "Homme Parfum",
     number: "No. 03",
     type: "Aromatic Fougère Woody Iris",
-    concentration: "Parfum · 20%",
+    subtitle: "2026 — Édition Limitée",
+    concentration: "Parfum · 30%",
     scentFamily: "Fougère",
     desc: "An aromatic fougère with a sharp iris heart softened by cedarwood and white musks. Clean, masculine, and unmistakably modern — built for the man who moves between worlds.",
     topNotes: "Lavender · Bergamot · Grapefruit",
@@ -99,14 +99,14 @@ const FRAGRANCES: Record<string, any> = {
     baseDuration: 85,
     price30: 195,
     price50: 285,
-    edition: "Limited · 40 bottles",
+    edition: "Artisan Made · Limited 40 bottles",
     batch: "HOM-2026-E1",
     origin: "Baltimore, MD · USA",
     projection: "Moderate · Versatile",
     longevity: "7–10 hours",
     season: "All seasons",
+    finish: "Polished Crystal",
     accent: "#4A5C6B",
-    bottleBg: "#F0F4F7",
   },
 };
 
@@ -139,7 +139,7 @@ export default function FragranceDetailScreen() {
           email: formEmail.trim(),
           phone: formPhone.trim(),
           fragrance: f.name,
-          volume: vol + "ml",
+          volume: `${vol}ml`,
           message: formMessage.trim(),
         }),
       });
@@ -167,17 +167,44 @@ export default function FragranceDetailScreen() {
 
   const price = vol === 30 ? f.price30 : f.price50;
 
+  const DETAILS = [
+    ["Concentration", f.concentration],
+    ["Scent family", f.scentFamily],
+    ["Projection", f.projection],
+    ["Longevity", f.longevity],
+    ["Best season", f.season],
+    ["Origin", f.origin],
+    ["Edition", f.edition],
+    ["Batch no.", f.batch],
+    ["Blockchain", "Stellar · Soroban"],
+    ["Finish", f.finish],
+  ];
+
+  const NOTES = [
+    {
+      tier: "Top Notes",
+      timing: "0–30 min",
+      notes: f.topNotes,
+      duration: f.topDuration,
+    },
+    {
+      tier: "Heart Notes",
+      timing: "30 min–3 hrs",
+      notes: f.heartNotes,
+      duration: f.heartDuration,
+    },
+    {
+      tier: "Base Notes",
+      timing: "3+ hrs",
+      notes: f.baseNotes,
+      duration: f.baseDuration,
+    },
+  ];
+
   return (
     <View style={s.root}>
       <SafeAreaView edges={["top"]} style={s.topBar}>
-        <View
-          style={[
-            s.topBarInner,
-            MAX_W
-              ? { maxWidth: MAX_W, alignSelf: "center" as const, width: "100%" }
-              : {},
-          ]}
-        >
+        <View style={s.topBarInner}>
           <TouchableOpacity
             onPress={() => router.back()}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -187,15 +214,15 @@ export default function FragranceDetailScreen() {
           <Text style={s.topLogo}>
             Michael <Text style={s.topLogoEm}>By Christian</Text>
           </Text>
-          <View style={{ width: 80 }} />
+          <View style={s.topSpacer} />
         </View>
       </SafeAreaView>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Hero — bottle + info */}
-        <View style={[s.hero, IS_WEB && { flexDirection: "row" }]}>
-          {/* Bottle panel */}
-          <View style={s.bottlePanel}>
+        {/* Hero */}
+        <View style={IS_WEB ? s.heroRow : s.heroCol}>
+          {/* Bottle — dark panel */}
+          <View style={IS_WEB ? s.bottlePanelWeb : s.bottlePanelMobile}>
             <View style={s.bottleScene}>
               <View style={[s.bottleCap, { backgroundColor: f.accent }]} />
               <View style={[s.bottleNeck, { borderColor: f.accent + "55" }]} />
@@ -205,7 +232,7 @@ export default function FragranceDetailScreen() {
                     s.liquidFill,
                     {
                       backgroundColor: f.accent + "1A",
-                      height: `${vol === 50 ? 72 : 52}%` as any,
+                      height: (vol === 50 ? "72%" : "52%") as any,
                     },
                   ]}
                 />
@@ -220,11 +247,15 @@ export default function FragranceDetailScreen() {
             <Text style={s.bottleVolTxt}>{vol} ml</Text>
           </View>
 
-          {/* Info panel */}
-          <View style={s.infoPanel}>
-            <Text style={[s.heroNumber, { color: f.accent }]}>{f.number}</Text>
+          {/* Info — white panel */}
+          <View style={IS_WEB ? s.infoPanelWeb : s.infoPanelMobile}>
+            <Text style={[s.heroNumber, { color: f.accent }]}>
+              Michael Christian Fragrances · {f.number}
+            </Text>
             <Text style={s.heroTitle}>{f.name}</Text>
-            <Text style={s.heroType}>{f.type}</Text>
+            <Text style={[s.heroSubtitle, { color: f.accent }]}>
+              {f.subtitle}
+            </Text>
             <Text style={s.heroDesc}>{f.desc}</Text>
 
             <View style={s.priceRow}>
@@ -246,7 +277,7 @@ export default function FragranceDetailScreen() {
                   onPress={() => setVol(v)}
                 >
                   <Text style={[s.volBtnTxt, vol === v && { color: f.accent }]}>
-                    {v} ml
+                    {v} ML
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -264,160 +295,119 @@ export default function FragranceDetailScreen() {
           </View>
         </View>
 
-        {/* NFC strip */}
-        <View style={s.nfcStrip}>
-          <View style={s.nfcDot} />
-          <View style={{ flex: 1 }}>
-            <Text style={s.nfcTitle}>✦ NFC Authentication Embedded</Text>
-            <Text style={s.nfcSub}>
-              Tap bottle cap to verify provenance on Stellar blockchain
-            </Text>
-          </View>
-        </View>
-
-        <View
-          style={[
-            s.content,
-            MAX_W
-              ? { maxWidth: MAX_W, alignSelf: "center" as const, width: "100%" }
-              : {},
-          ]}
-        >
-          {/* Inquiry form */}
-          {(showForm || submitted) && (
-            <View style={s.formSection}>
-              {submitted ? (
-                <View style={s.successBox}>
-                  <Text style={s.successIcon}>✦</Text>
-                  <Text style={s.successTitle}>Inquiry Received</Text>
-                  <Text style={s.successSub}>
-                    We'll be in touch at {formEmail} within 24 hours.
+        {/* Inquiry form */}
+        {(showForm || submitted) && (
+          <View style={s.formSection}>
+            {submitted ? (
+              <View style={s.successBox}>
+                <Text style={s.successIcon}>✦</Text>
+                <Text style={s.successTitle}>Inquiry Received</Text>
+                <Text style={s.successSub}>
+                  We'll be in touch at {formEmail} within 24 hours.
+                </Text>
+              </View>
+            ) : (
+              <KeyboardAvoidingView
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
+              >
+                <View style={s.formBox}>
+                  <Text style={s.formTitle}>
+                    {f.name} · {vol}ml Inquiry
                   </Text>
+                  <Text style={s.formSub}>
+                    Fill out the form and we'll respond within 24 hours.
+                  </Text>
+
+                  <Text style={s.inputLabel}>Full Name *</Text>
+                  <TextInput
+                    style={s.input}
+                    placeholder="Your name"
+                    placeholderTextColor={T.textMuted}
+                    value={formName}
+                    onChangeText={setFormName}
+                    autoCapitalize="words"
+                  />
+
+                  <Text style={s.inputLabel}>Email Address *</Text>
+                  <TextInput
+                    style={s.input}
+                    placeholder="your@email.com"
+                    placeholderTextColor={T.textMuted}
+                    value={formEmail}
+                    onChangeText={setFormEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+
+                  <Text style={s.inputLabel}>Phone (optional)</Text>
+                  <TextInput
+                    style={s.input}
+                    placeholder="+1 (000) 000-0000"
+                    placeholderTextColor={T.textMuted}
+                    value={formPhone}
+                    onChangeText={setFormPhone}
+                    keyboardType="phone-pad"
+                  />
+
+                  <Text style={s.inputLabel}>Message (optional)</Text>
+                  <TextInput
+                    style={[s.input, s.inputMulti]}
+                    placeholder="Any questions or special requests..."
+                    placeholderTextColor={T.textMuted}
+                    value={formMessage}
+                    onChangeText={setFormMessage}
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                  />
+
+                  {!!submitError && (
+                    <Text style={s.errorTxt}>{submitError}</Text>
+                  )}
+
+                  <TouchableOpacity
+                    style={[
+                      s.submitBtn,
+                      { backgroundColor: f.accent },
+                      submitting && s.btnDisabled,
+                    ]}
+                    onPress={submitInquiry}
+                    disabled={submitting}
+                    activeOpacity={0.85}
+                  >
+                    {submitting ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text style={s.submitBtnTxt}>Send Inquiry →</Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setShowForm(false)}
+                    style={s.cancelWrap}
+                  >
+                    <Text style={s.cancelTxt}>Cancel</Text>
+                  </TouchableOpacity>
                 </View>
-              ) : (
-                <KeyboardAvoidingView
-                  behavior={Platform.OS === "ios" ? "padding" : undefined}
-                >
-                  <View style={s.formBox}>
-                    <Text style={s.formTitle}>
-                      {f.name} · {vol}ml Inquiry
-                    </Text>
-                    <Text style={s.formSub}>
-                      Fill out the form and we'll respond within 24 hours.
-                    </Text>
+              </KeyboardAvoidingView>
+            )}
+          </View>
+        )}
 
-                    <Text style={s.inputLabel}>Full Name *</Text>
-                    <TextInput
-                      style={s.input}
-                      placeholder="Your name"
-                      placeholderTextColor={T.textMuted}
-                      value={formName}
-                      onChangeText={setFormName}
-                      autoCapitalize="words"
-                    />
-
-                    <Text style={s.inputLabel}>Email Address *</Text>
-                    <TextInput
-                      style={s.input}
-                      placeholder="your@email.com"
-                      placeholderTextColor={T.textMuted}
-                      value={formEmail}
-                      onChangeText={setFormEmail}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                    />
-
-                    <Text style={s.inputLabel}>Phone (optional)</Text>
-                    <TextInput
-                      style={s.input}
-                      placeholder="+1 (000) 000-0000"
-                      placeholderTextColor={T.textMuted}
-                      value={formPhone}
-                      onChangeText={setFormPhone}
-                      keyboardType="phone-pad"
-                    />
-
-                    <Text style={s.inputLabel}>Message (optional)</Text>
-                    <TextInput
-                      style={[s.input, s.inputMulti]}
-                      placeholder="Any questions or special requests..."
-                      placeholderTextColor={T.textMuted}
-                      value={formMessage}
-                      onChangeText={setFormMessage}
-                      multiline
-                      numberOfLines={3}
-                      textAlignVertical="top"
-                    />
-
-                    {submitError ? (
-                      <Text style={s.errorTxt}>{submitError}</Text>
-                    ) : null}
-
-                    <TouchableOpacity
-                      style={[
-                        s.submitBtn,
-                        { backgroundColor: f.accent },
-                        submitting && { opacity: 0.6 },
-                      ]}
-                      onPress={submitInquiry}
-                      disabled={submitting}
-                      activeOpacity={0.85}
-                    >
-                      {submitting ? (
-                        <ActivityIndicator color="#fff" size="small" />
-                      ) : (
-                        <Text style={s.submitBtnTxt}>Send Inquiry →</Text>
-                      )}
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => setShowForm(false)}
-                      style={s.cancelWrap}
-                    >
-                      <Text style={s.cancelTxt}>Cancel</Text>
-                    </TouchableOpacity>
-                  </View>
-                </KeyboardAvoidingView>
-              )}
-            </View>
-          )}
-
+        <View style={s.content}>
           <View style={s.rule} />
 
           {/* Olfactory pyramid */}
           <Text style={[s.sectionLbl, { color: f.accent }]}>
             Olfactory Composition
           </Text>
-          <View style={s.pyramidBox}>
-            {[
-              {
-                tier: "Top Notes",
-                timing: "0–30 min",
-                notes: f.topNotes,
-                duration: f.topDuration,
-              },
-              {
-                tier: "Heart Notes",
-                timing: "30 min–3 hrs",
-                notes: f.heartNotes,
-                duration: f.heartDuration,
-              },
-              {
-                tier: "Base Notes",
-                timing: "3+ hrs",
-                notes: f.baseNotes,
-                duration: f.baseDuration,
-              },
-            ].map((note, i) => (
+          <View style={IS_WEB ? s.pyramidRow : s.pyramidCol}>
+            {NOTES.map((note, i) => (
               <View
                 key={i}
                 style={[
-                  s.noteCard,
-                  !IS_WEB &&
-                    i < 2 && {
-                      borderBottomWidth: 1,
-                      borderBottomColor: T.border,
-                    },
-                  IS_WEB && i === 2 && { borderRightWidth: 0 },
+                  IS_WEB ? s.noteCardWeb : s.noteCardMobile,
+                  IS_WEB && i < 2 ? s.noteCardBorderRight : null,
+                  !IS_WEB && i < 2 ? s.noteCardBorderBottom : null,
                 ]}
               >
                 <View style={s.noteTierRow}>
@@ -430,7 +420,7 @@ export default function FragranceDetailScreen() {
                     style={[
                       s.durationFill,
                       {
-                        width: (note.duration + "%") as any,
+                        width: `${note.duration}%` as any,
                         backgroundColor: f.accent,
                       },
                     ]}
@@ -442,28 +432,18 @@ export default function FragranceDetailScreen() {
 
           <View style={s.rule} />
 
-          {/* Details */}
+          {/* Provenance details */}
           <Text style={[s.sectionLbl, { color: f.accent }]}>
             Provenance & Details
           </Text>
           <View style={s.detailsBox}>
-            {[
-              ["Concentration", f.concentration],
-              ["Scent family", f.scentFamily],
-              ["Projection", f.projection],
-              ["Longevity", f.longevity],
-              ["Best season", f.season],
-              ["Origin", f.origin],
-              ["Edition", f.edition],
-              ["Batch no.", f.batch],
-              ["Blockchain", "Stellar · Soroban"],
-              ["Royalty", "5% on secondary"],
-            ].map(([key, val], i) => (
+            {DETAILS.map(([key, val], i) => (
               <View
                 key={i}
                 style={[
                   s.detailRow,
-                  i % 2 !== 0 && { backgroundColor: T.bgAlt },
+                  IS_WEB ? s.detailRowHalf : null,
+                  i % 2 !== 0 ? { backgroundColor: T.bgAlt } : null,
                 ]}
               >
                 <Text style={s.detailKey}>{key}</Text>
@@ -472,7 +452,7 @@ export default function FragranceDetailScreen() {
             ))}
           </View>
 
-          {/* Other fragrances */}
+          {/* Collection */}
           <View style={s.rule} />
           <Text style={[s.sectionLbl, { color: f.accent }]}>
             The Collection
@@ -485,13 +465,14 @@ export default function FragranceDetailScreen() {
                   s.collCard,
                   frag.name === f.name && { borderColor: f.accent },
                 ]}
-                onPress={() =>
-                  frag.name !== f.name &&
-                  router.push({
-                    pathname: "/fragrance/[id]",
-                    params: { id: key },
-                  } as any)
-                }
+                onPress={() => {
+                  if (frag.name !== f.name) {
+                    router.push({
+                      pathname: "/fragrance/[id]",
+                      params: { id: key },
+                    } as any);
+                  }
+                }}
                 activeOpacity={0.85}
               >
                 <Text
@@ -512,7 +493,7 @@ export default function FragranceDetailScreen() {
             ))}
           </View>
 
-          <View style={{ height: 60 }} />
+          <View style={s.spacer} />
         </View>
       </ScrollView>
     </View>
@@ -543,6 +524,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
+  topSpacer: { width: 80 },
   backTxt: { fontSize: 11, color: T.textSub },
   topLogo: {
     fontFamily: "serif",
@@ -552,17 +534,29 @@ const s = StyleSheet.create({
   },
   topLogoEm: { fontStyle: "italic", fontWeight: "400", color: T.gold },
 
-  hero: {
+  heroRow: {
+    flexDirection: "row",
     borderBottomWidth: 1,
     borderBottomColor: T.border,
-    flexDirection: IS_WEB ? "row" : "column",
   },
-  bottlePanel: {
-    width: IS_WEB ? "45%" : "100%",
+  heroCol: {
+    flexDirection: "column",
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+  },
+
+  bottlePanelWeb: {
+    width: "45%",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 52,
-    minHeight: IS_WEB ? 380 : 260,
+    backgroundColor: "#0C0B09",
+  },
+  bottlePanelMobile: {
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 48,
     backgroundColor: "#0C0B09",
   },
   bottleScene: { alignItems: "center" },
@@ -607,23 +601,21 @@ const s = StyleSheet.create({
     letterSpacing: 3,
     textTransform: "uppercase",
     marginTop: 16,
-    fontWeight: "600",
     color: "rgba(212,175,106,0.7)",
   },
 
-  infoPanel: {
+  infoPanelWeb: {
     flex: 1,
-    padding: IS_WEB ? 40 : 24,
-    paddingTop: IS_WEB ? 36 : 20,
+    padding: 40,
     backgroundColor: T.bg,
     justifyContent: "center",
   },
+  infoPanelMobile: { padding: 24, backgroundColor: T.bg },
   heroNumber: {
-    fontSize: 9,
+    fontSize: 8,
     letterSpacing: 3,
     textTransform: "uppercase",
     marginBottom: 8,
-    fontWeight: "600",
   },
   heroTitle: {
     fontFamily: "serif",
@@ -633,11 +625,10 @@ const s = StyleSheet.create({
     marginBottom: 4,
     lineHeight: 32,
   },
-  heroType: {
+  heroSubtitle: {
     fontFamily: "serif",
     fontStyle: "italic",
     fontSize: 14,
-    color: T.gold,
     marginBottom: 14,
   },
   heroDesc: {
@@ -681,37 +672,10 @@ const s = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 2,
     textTransform: "uppercase",
-    color: "#fff",
+    color: "#FFFFFF",
   },
 
-  nfcStrip: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-    padding: 14,
-    backgroundColor: T.greenBg,
-    borderBottomWidth: 1,
-    borderBottomColor: T.greenBorder,
-  },
-  nfcDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: T.green,
-    marginTop: 3,
-    flexShrink: 0,
-  },
-  nfcTitle: {
-    fontSize: 11,
-    color: T.green,
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-  nfcSub: { fontSize: 10, color: T.textSub },
-
-  content: { paddingHorizontal: 24 },
-
-  formSection: { paddingTop: 28 },
+  formSection: { paddingHorizontal: 24, paddingTop: 28 },
   formBox: {
     borderWidth: 1,
     borderColor: T.border,
@@ -747,12 +711,13 @@ const s = StyleSheet.create({
   inputMulti: { minHeight: 80, paddingTop: 12 },
   errorTxt: { fontSize: 11, color: T.red, marginBottom: 10 },
   submitBtn: { padding: 14, alignItems: "center", marginBottom: 10 },
+  btnDisabled: { opacity: 0.6 },
   submitBtnTxt: {
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 2,
     textTransform: "uppercase",
-    color: "#fff",
+    color: "#FFFFFF",
   },
   cancelWrap: { alignItems: "center", paddingVertical: 8 },
   cancelTxt: { fontSize: 10, color: T.textMuted, letterSpacing: 1 },
@@ -779,6 +744,7 @@ const s = StyleSheet.create({
     lineHeight: 18,
   },
 
+  content: { paddingHorizontal: 24 },
   rule: { height: 1, backgroundColor: T.border, marginVertical: 28 },
   sectionLbl: {
     fontSize: 9,
@@ -787,20 +753,24 @@ const s = StyleSheet.create({
     marginBottom: 16,
     fontWeight: "600",
   },
+  spacer: { height: 60 },
 
-  pyramidBox: {
-    flexDirection: IS_WEB ? "row" : "column",
+  pyramidRow: {
+    flexDirection: "row",
     borderWidth: 1,
     borderColor: T.border,
     overflow: "hidden",
   },
-  noteCard: {
-    flex: IS_WEB ? 1 : undefined,
-    padding: 18,
-    backgroundColor: T.bg,
-    borderRightWidth: IS_WEB ? 1 : 0,
-    borderRightColor: T.border,
+  pyramidCol: {
+    flexDirection: "column",
+    borderWidth: 1,
+    borderColor: T.border,
+    overflow: "hidden",
   },
+  noteCardWeb: { flex: 1, padding: 18, backgroundColor: T.bg },
+  noteCardMobile: { padding: 18, backgroundColor: T.bg },
+  noteCardBorderRight: { borderRightWidth: 1, borderRightColor: T.border },
+  noteCardBorderBottom: { borderBottomWidth: 1, borderBottomColor: T.border },
   noteTierRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -826,6 +796,7 @@ const s = StyleSheet.create({
     flexWrap: "wrap",
   },
   detailRow: {
+    width: "100%",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -834,8 +805,8 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: T.border,
     backgroundColor: T.bg,
-    width: IS_WEB ? "50%" : "100%",
   },
+  detailRowHalf: { width: "50%" },
   detailKey: {
     fontSize: 9,
     letterSpacing: 1,
