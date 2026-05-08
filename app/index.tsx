@@ -257,6 +257,16 @@ function HeroVideo({ style }: { style: any }) {
         muted
         loop
         playsInline
+        // @ts-ignore
+        webkit-playsinline="true"
+        disablePictureInPicture
+        preload="auto"
+        ref={(el: any) => {
+          if (el) {
+            el.muted = true;
+            el.play().catch(() => {});
+          }
+        }}
         style={{
           width: "100%",
           height: "100%",
@@ -266,6 +276,7 @@ function HeroVideo({ style }: { style: any }) {
           left: 0,
           right: 0,
           bottom: 0,
+          pointerEvents: "none",
         }}
       />
     );
