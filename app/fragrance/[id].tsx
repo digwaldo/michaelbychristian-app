@@ -13,7 +13,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -273,7 +273,7 @@ export default function FragranceDetailScreen() {
         </View>
       </SafeAreaView>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} nestedScrollEnabled>
         {/* Hero */}
         <View style={IS_WIDE ? s.heroRow : s.heroCol}>
           {/* Bottle — dark panel with real image */}
