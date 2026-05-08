@@ -11,6 +11,8 @@ export default function RootLayout() {
         <Stack.Screen name="rarity" />
         <Stack.Screen name="fragrance" />
         <Stack.Screen name="fragrance/[id]" />
+        <Stack.Screen name="auth" />
+        <Stack.Screen name="profile" />
         <Stack.Screen name="+not-found" />
       </Stack>
     </AuthProvider>

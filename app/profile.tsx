@@ -1,215 +1,111 @@
-// app/profile.tsx — My Pieces / Profile screen
-// Card grid layout matching collection page
+// app/profile.tsx — Profile screen (main branch, light theme)
 
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
-  Image,
   Linking,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { CartIcon } from "../components/CartIcon";
 import { useAuth } from "../context/AuthContext";
-import {
-  BACKEND,
-  C,
-  CONTRACT,
-  EXPLORER,
-  PASSPHRASE,
-  RPC_URL,
-} from "../lib/theme";
+import { supabase } from "../lib/supabase";
 
 const IS_WEB = Platform.OS === "web";
-const { width } = Dimensions.get("window");
-const COLS = IS_WEB ? 3 : 2;
-const GAP = 2;
 
-// Resolve IPFS images
-function resolveImg(img?: string): string | null {
-  if (!img) return null;
-  if (img.startsWith("ipfs://"))
-    return img.replace("ipfs://", "https://ipfs.io/ipfs/");
-  return img;
-}
+const T = {
+  bg: "#FFFFFF",
+  bgAlt: "#F8F6F2",
+  bgDeep: "#F2EFE9",
+  border: "#E8E4DC",
+  text: "#1A1814",
+  textSub: "#6B6458",
+  textMuted: "#9A9088",
+  gold: "#B8963E",
+  greenBg: "#EEF7F2",
+  greenBorder: "#A8D4BC",
+  green: "#2D7A52",
+  red: "#B84040",
+};
 
-interface OwnedPiece {
-  tokenId: number;
-  name: string;
-  image: string | null;
-  soldAt: string;
-  claimed: boolean;
-  buyerWallet: string | null;
-  amount: number;
-  // On-chain traits (loaded lazily)
-  silhouette?: string;
-  edition_type?: string;
-  primary_texture?: string;
-  primary_color?: string;
-  nfc_chip_id?: string;
-  owner?: string | null;
-  rarity_rank?: number;
-  rarity_label?: string;
-}
-
-async function loadTokenImage(
-  tokenId: number,
-): Promise<{
-  image: string | null;
-  silhouette: string;
-  edition_type: string;
-  primary_texture: string;
-  primary_color: string;
-  nfc_chip_id: string;
-  owner: string | null;
-}> {
-  try {
-    const Sdk = await import("@stellar/stellar-sdk" as any);
-    const server = new Sdk.rpc.Server(RPC_URL);
-    const contract = new Sdk.Contract(CONTRACT);
-    const keypair = Sdk.Keypair.random();
-    const account = new Sdk.Account(keypair.publicKey(), "0");
-
-    async function sim(fn: string, args: any[] = []) {
-      const tx = new Sdk.TransactionBuilder(account, {
-        fee: Sdk.BASE_FEE,
-        networkPassphrase: PASSPHRASE,
-      })
-        .addOperation(contract.call(fn, ...args))
-        .setTimeout(30)
-        .build();
-      const result = await server.simulateTransaction(tx);
-      if (!Sdk.rpc.Api.isSimulationSuccess(result)) return null;
-      return Sdk.scValToNative(result.result.retval);
-    }
-
-    const tokenArg = Sdk.nativeToScVal(tokenId, { type: "u64" });
-    const [raw, ownerRaw] = await Promise.all([
-      sim("full_token_data", [tokenArg]),
-      sim("owner_of", [tokenArg]).catch(() => null),
-    ]);
-
-    const t = raw?.traits || {};
-    return {
-      image: resolveImg(raw?.image),
-      silhouette: t.silhouette || raw?.silhouette || "",
-      edition_type: t.edition_type || raw?.edition_type || "",
-      primary_texture: t.primary_texture || raw?.primary_texture || "",
-      primary_color: t.primary_color || raw?.primary_color || "",
-      nfc_chip_id: t.nfc_chip_id || raw?.nfc_chip_id || "",
-      owner: ownerRaw ? String(ownerRaw).trim() : null,
-    };
-  } catch {
-    return {
-      image: null,
-      silhouette: "",
-      edition_type: "",
-      primary_texture: "",
-      primary_color: "",
-      nfc_chip_id: "",
-      owner: null,
-    };
-  }
+interface Inquiry {
+  id: string;
+  fragrance: string;
+  volume: string;
+  created_at: string;
+  status: string;
 }
 
 export default function ProfileScreen() {
-  const { session, profile, signOut, loading } = useAuth();
-  const [pieces, setPieces] = useState<OwnedPiece[]>([]);
-  const [piecesLoading, setPiecesLoading] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const { session, user, profile, loading, signOut, refreshProfile } =
+    useAuth();
+  const [inquiries, setInquiries] = useState<Inquiry[]>([]);
+  const [inquiriesLoading, setInqLoading] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [savingName, setSavingName] = useState(false);
+  const [nameError, setNameError] = useState("");
 
   useEffect(() => {
-    if (session?.user) loadPieces();
-  }, [session]);
+    if (user) loadInquiries();
+  }, [user]);
 
-  async function loadPieces() {
-    if (!session?.user?.email) return;
-    setPiecesLoading(true);
+  async function loadInquiries() {
+    if (!user?.email) return;
+    setInqLoading(true);
     try {
-      const res = await fetch(`${BACKEND}/api/sold?type=list`);
-      const { soldTokenIds } = await res.json();
-
-      const owned: OwnedPiece[] = [];
-      await Promise.all(
-        soldTokenIds.map(async (tokenId: number) => {
-          const [checkRes, myRes, rarityRes] = await Promise.all([
-            fetch(`${BACKEND}/api/sold?type=check&token_id=${tokenId}`)
-              .then((r) => r.json())
-              .catch(() => null),
-            fetch(
-              `${BACKEND}/api/my-pieces?email=${encodeURIComponent(session.user!.email!)}&token_id=${tokenId}`,
-            )
-              .then((r) => r.json())
-              .catch(() => null),
-            fetch(`${BACKEND}/api/rarity?type=token&token_id=${tokenId}`)
-              .then((r) => r.json())
-              .catch(() => null),
-          ]);
-          if (myRes?.isOwner) {
-            // Also check on-chain: if owner !== admin wallet, it's claimed
-            // even if KV hasn't been updated yet
-            const onChainClaimed = false; // resolved lazily when image loads
-            owned.push({
-              tokenId,
-              name: myRes.bagName || `Token #${tokenId}`,
-              image: null,
-              soldAt: checkRes?.soldAt || myRes.soldAt,
-              claimed: checkRes?.claimed || myRes.claimed || false,
-              buyerWallet: checkRes?.buyerWallet || null,
-              amount: myRes.amount,
-              rarity_rank: rarityRes?.found ? rarityRes.rank : undefined,
-              rarity_label: rarityRes?.found ? rarityRes.label : undefined,
-            });
-          }
-        }),
-      );
-
-      const sorted = owned.sort(
-        (a, b) => new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime(),
-      );
-      setPieces(sorted);
-
-      // Load images + traits + on-chain owner from Stellar in background
-      for (const piece of sorted) {
-        loadTokenImage(piece.tokenId).then((traits) => {
-          // If on-chain owner is not admin → NFT is claimed
-          const ADMIN =
-            "GB2GKZ22XFF5BZWRV6AIO7JLCDT7W36Y5DFIUWPENA5IIDEAH7FLXOA3";
-          const onChainClaimed =
-            !!traits.owner &&
-            traits.owner.toUpperCase() !== ADMIN.toUpperCase();
-          setPieces((prev) =>
-            prev.map((p) =>
-              p.tokenId === piece.tokenId
-                ? {
-                    ...p,
-                    ...traits,
-                    claimed: p.claimed || onChainClaimed,
-                    buyerWallet: onChainClaimed ? traits.owner : p.buyerWallet,
-                  }
-                : p,
-            ),
-          );
-        });
-      }
+      const { data, error } = await supabase
+        .from("fragrance_inquiries")
+        .select("*")
+        .eq("email", user.email.toLowerCase())
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (!error && data) setInquiries(data);
     } catch (e) {
-      console.log("Load pieces failed:", e);
+      console.log("Inquiries load failed:", e);
     } finally {
-      setPiecesLoading(false);
+      setInqLoading(false);
     }
   }
 
-  const short = (addr: string) =>
-    addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : "—";
+  async function saveName() {
+    if (!newName.trim()) {
+      setNameError("Name cannot be empty.");
+      return;
+    }
+    setSavingName(true);
+    setNameError("");
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ name: newName.trim() })
+        .eq("id", user!.id);
+      if (error) {
+        setNameError(error.message);
+        return;
+      }
+      await refreshProfile();
+      setEditingName(false);
+    } finally {
+      setSavingName(false);
+    }
+  }
 
-  // ── Not logged in ─────────────────────────────────────────────
+  function formatDate(iso: string) {
+    return new Date(iso).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+
+  // ── Not signed in ──────────────────────────────────────────
   if (!loading && !session) {
     return (
       <View style={s.root}>
@@ -221,27 +117,32 @@ export default function ProfileScreen() {
             >
               <Text style={s.backTxt}>← Back</Text>
             </TouchableOpacity>
-            <Text style={s.topEye}>My Pieces</Text>
-            <View style={{ width: 60 }} />
+            <Text style={s.topLogo}>
+              Michael <Text style={s.topLogoEm}>By Christian</Text>
+            </Text>
+            <View style={s.topSpacer} />
           </View>
         </SafeAreaView>
         <View style={s.center}>
-          <Text style={s.guestIcon}>👜</Text>
-          <Text style={s.guestTitle}>Sign In to View Your Pieces</Text>
+          <Text style={s.guestEye}>Michael By Christian</Text>
+          <Text style={s.guestTitle}>My Profile</Text>
           <Text style={s.guestSub}>
-            Your purchased bags, wallet, and order history all in one place.
+            Sign in to view your fragrance inquiries and be first to know when
+            pieces become available.
           </Text>
           <TouchableOpacity
             style={s.signInBtn}
             onPress={() => router.push("/auth" as any)}
+            activeOpacity={0.85}
           >
-            <Text style={s.signInBtnTxt}>Sign In / Create Account</Text>
+            <Text style={s.signInBtnTxt}>Sign In / Create Account →</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={s.browseBtn}
-            onPress={() => router.push("/collection" as any)}
+            style={s.ghostBtn}
+            onPress={() => router.push("/fragrance" as any)}
+            activeOpacity={0.85}
           >
-            <Text style={s.browseBtnTxt}>Browse Collection →</Text>
+            <Text style={s.ghostBtnTxt}>Browse Fragrances</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -250,38 +151,38 @@ export default function ProfileScreen() {
 
   if (loading) {
     return (
-      <View style={s.center}>
-        <ActivityIndicator color={C.gold} size="large" />
+      <View style={s.centerFull}>
+        <ActivityIndicator color={T.gold} size="large" />
       </View>
     );
   }
 
+  const initials = (profile?.name || user?.email || "M")
+    .split(" ")
+    .map((w: string) => w[0])
+    .join("")
+    .substring(0, 2)
+    .toUpperCase();
+
   return (
     <View style={s.root}>
-      {/* ── Nav ── */}
       <SafeAreaView edges={["top"]} style={s.topBar}>
         <View style={s.topBarInner}>
-          <View>
-            <Text style={s.navEye}>Michael By Christian</Text>
-            <Text style={s.navTitle}>
-              My <Text style={s.navTitleEm}>Pieces</Text>
-            </Text>
-          </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-            <CartIcon />
-            <TouchableOpacity
-              onPress={() => router.push("/collection" as any)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={s.navLink}>Collection</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={signOut}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={s.navLink}>Sign Out</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={s.backTxt}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={s.topLogo}>
+            Michael <Text style={s.topLogoEm}>By Christian</Text>
+          </Text>
+          <TouchableOpacity
+            onPress={signOut}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={s.signOutTxt}>Sign Out</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
 
@@ -289,250 +190,181 @@ export default function ProfileScreen() {
         {/* ── Profile header ── */}
         <View style={s.profileHeader}>
           <View style={s.avatar}>
-            <Text style={s.avatarTxt}>
-              {(profile?.name || session!.user.email || "M")[0].toUpperCase()}
-            </Text>
+            <Text style={s.avatarTxt}>{initials}</Text>
           </View>
-          <Text style={s.profileName}>{profile?.name || "MBC Member"}</Text>
-          <Text style={s.profileEmail}>{session!.user.email}</Text>
+
+          {editingName ? (
+            <View style={s.editNameRow}>
+              <TextInput
+                style={s.nameInput}
+                value={newName}
+                onChangeText={setNewName}
+                autoFocus
+                autoCapitalize="words"
+                placeholder="Your name"
+                placeholderTextColor={T.textMuted}
+              />
+              <TouchableOpacity
+                style={[s.saveNameBtn, savingName && { opacity: 0.6 }]}
+                onPress={saveName}
+                disabled={savingName}
+              >
+                {savingName ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={s.saveNameTxt}>Save</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={s.cancelNameBtn}
+                onPress={() => {
+                  setEditingName(false);
+                  setNameError("");
+                }}
+              >
+                <Text style={s.cancelNameTxt}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={() => {
+                setNewName(profile?.name || "");
+                setEditingName(true);
+              }}
+              style={s.nameRow}
+            >
+              <Text style={s.profileName}>{profile?.name || "MBC Member"}</Text>
+              <Text style={s.editIcon}>✎</Text>
+            </TouchableOpacity>
+          )}
+          {!!nameError && <Text style={s.nameError}>{nameError}</Text>}
+
+          <Text style={s.profileEmail}>{user?.email}</Text>
+          <Text style={s.memberSince}>
+            Member since{" "}
+            {profile?.created_at ? formatDate(profile.created_at) : "—"}
+          </Text>
         </View>
 
-        {/* ── Wallet strip ── */}
-        {profile?.stellar_wallet_public ? (
-          <TouchableOpacity
-            style={s.walletStrip}
-            onPress={() => {
-              const url = `${EXPLORER}/account/${profile.stellar_wallet_public}`;
-              if (IS_WEB) window.open(url, "_blank");
-              else Linking.openURL(url);
-            }}
-            activeOpacity={0.8}
-          >
-            <View>
-              <Text style={s.walletStripLabel}>Stellar Wallet</Text>
-              <Text style={s.walletStripAddr}>
-                {short(profile.stellar_wallet_public)}
-              </Text>
-            </View>
-            <Text style={s.walletStripLink}>View on Explorer ↗</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={s.noWalletStrip}>
-            <Text style={s.noWalletTxt}>
-              No wallet yet — purchase a piece to get yours automatically.
+        {/* ── My Pieces — Coming Soon ── */}
+        <View style={s.section}>
+          <Text style={s.sectionEye}>My Pieces</Text>
+          <Text style={s.sectionTitle}>On-Chain Ownership</Text>
+          <View style={s.comingSoonBox}>
+            <Text style={s.comingSoonIcon}>✦</Text>
+            <Text style={s.comingSoonTitle}>Coming Soon</Text>
+            <Text style={s.comingSoonSub}>
+              MBC is launching on the Stellar blockchain. Once live, your
+              authenticated bags and fragrances will appear here — with full
+              on-chain provenance, NFC verification, and transfer history.
             </Text>
-          </View>
-        )}
-
-        {/* ── Stats bar ── */}
-        {!piecesLoading && (
-          <View style={s.statsBar}>
-            {[
-              { v: String(pieces.length), l: "Owned" },
-              {
-                v: String(pieces.filter((p) => p.claimed).length),
-                l: "Claimed",
-              },
-              {
-                v: String(pieces.filter((p) => !p.claimed).length),
-                l: "Unclaimed",
-              },
-            ].map(({ v, l }) => (
-              <View key={l} style={s.statCell}>
-                <Text style={s.statVal}>{v}</Text>
-                <Text style={s.statLbl}>{l}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* ── Pieces grid ── */}
-        {piecesLoading ? (
-          <View style={s.center}>
-            <ActivityIndicator color={C.gold} size="small" />
-            <Text style={s.loadTxt}>Loading your pieces...</Text>
-          </View>
-        ) : pieces.length === 0 ? (
-          <View style={s.center}>
-            <Text style={s.emptyTitle}>No pieces yet</Text>
             <TouchableOpacity
-              style={s.browseBtn}
-              onPress={() => router.push("/collection" as any)}
+              style={s.notifyBtn}
+              onPress={() =>
+                Linking.openURL(
+                  `mailto:youngcompltd@gmail.com?subject=Mainnet Launch Notification — ${user?.email}&body=Please notify me when MBC launches on mainnet.`,
+                )
+              }
+              activeOpacity={0.85}
             >
-              <Text style={s.browseBtnTxt}>Browse the Collection →</Text>
+              <Text style={s.notifyBtnTxt}>Notify Me at Launch →</Text>
             </TouchableOpacity>
           </View>
-        ) : (
-          <View style={s.grid}>
-            {Array.from(
-              { length: Math.ceil(pieces.length / COLS) },
-              (_, rowIdx) => (
-                <View key={rowIdx} style={s.row}>
-                  {pieces
-                    .slice(rowIdx * COLS, rowIdx * COLS + COLS)
-                    .map((piece) => (
-                      <TouchableOpacity
-                        key={piece.tokenId}
-                        style={s.card}
-                        onPress={() =>
-                          router.push({
-                            pathname: "/piece/[id]",
-                            params: { id: piece.tokenId },
-                          })
-                        }
-                        activeOpacity={0.88}
-                      >
-                        {/* Image */}
-                        <View style={s.cardImg}>
-                          {piece.image ? (
-                            <Image
-                              source={{ uri: piece.image }}
-                              style={StyleSheet.absoluteFillObject}
-                              resizeMode="cover"
-                            />
-                          ) : (
-                            <Text style={s.cardInit}>
-                              {piece.name
-                                .split(" ")
-                                .map((w: string) => w[0])
-                                .join("")
-                                .substring(0, 2)
-                                .toUpperCase()}
-                            </Text>
-                          )}
-                          <View style={s.imgOverlay} />
+        </View>
 
-                          {/* Token badge */}
-                          <View style={s.badgeColRight}>
-                            <View style={s.tokenBadge}>
-                              <Text style={s.tokenBadgeTxt} numberOfLines={1}>
-                                #{piece.tokenId}
-                              </Text>
-                            </View>
-                            {piece.rarity_rank ? (
-                              <View style={s.rarityBadge}>
-                                <Text
-                                  style={s.rarityBadgeTxt}
-                                  numberOfLines={1}
-                                >
-                                  Rank #{piece.rarity_rank}
-                                </Text>
-                              </View>
-                            ) : null}
-                          </View>
+        <View style={s.dividerLine} />
 
-                          {/* Left badges */}
-                          <View style={s.badgeColLeft}>
-                            {piece.edition_type ? (
-                              <View style={s.editionBadge}>
-                                <Text
-                                  style={s.editionBadgeTxt}
-                                  numberOfLines={1}
-                                >
-                                  {piece.edition_type}
-                                </Text>
-                              </View>
-                            ) : null}
-                            {piece.rarity_label ? (
-                              <View style={s.rarityLabelBadge}>
-                                <Text
-                                  style={s.rarityLabelTxt}
-                                  numberOfLines={1}
-                                >
-                                  {piece.rarity_label}
-                                </Text>
-                              </View>
-                            ) : null}
-                          </View>
+        {/* ── Fragrance Inquiries ── */}
+        <View style={s.section}>
+          <Text style={s.sectionEye}>Fragrance Inquiries</Text>
+          <Text style={s.sectionTitle}>Your Requests</Text>
 
-                          {/* Claimed / Unclaimed */}
-                          {piece.claimed ? (
-                            <View style={s.claimedBadge}>
-                              <Text style={s.claimedBadgeTxt}>✦ Claimed</Text>
-                            </View>
-                          ) : (
-                            <View style={s.unclaimedBadge}>
-                              <Text style={s.unclaimedBadgeTxt}>Unclaimed</Text>
-                            </View>
-                          )}
-
-                          {/* NFC */}
-                          {piece.nfc_chip_id ? (
-                            <View style={s.nfcBadge}>
-                              <Text style={s.nfcBadgeTxt}>✦ NFC</Text>
-                            </View>
-                          ) : null}
-                        </View>
-
-                        {/* Card body */}
-                        <View style={s.cardBody}>
-                          <Text style={s.cardSilhouette} numberOfLines={1}>
-                            {piece.silhouette
-                              ? `${piece.silhouette} · Silhouette`
-                              : "MBC"}
-                          </Text>
-                          <Text style={s.cardName} numberOfLines={2}>
-                            {piece.name}
-                          </Text>
-                          <Text style={s.cardSub} numberOfLines={1}>
-                            {[piece.primary_texture, piece.primary_color]
-                              .filter(Boolean)
-                              .join(" · ") || "NFC Embedded"}
-                          </Text>
-                        </View>
-
-                        {/* Card footer */}
-                        <View style={s.cardFoot}>
-                          <View>
-                            <Text style={s.cardPrice}>
-                              ${(piece.amount / 100).toFixed(0)}
-                            </Text>
-                            <Text style={s.cardCurrency}>USD</Text>
-                          </View>
-                          <View
-                            style={[
-                              s.statusPill,
-                              piece.claimed
-                                ? s.statusPillClaimed
-                                : s.statusPillUnclaimed,
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                s.statusPillTxt,
-                                piece.claimed
-                                  ? { color: C.green }
-                                  : { color: "#C0614A" },
-                              ]}
-                            >
-                              {piece.claimed ? "✦ NFT Claimed" : "Claim NFT →"}
-                            </Text>
-                          </View>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  {/* Fill empty slots in last row */}
-                  {pieces.slice(rowIdx * COLS, rowIdx * COLS + COLS).length <
-                    COLS &&
-                    Array.from(
-                      {
-                        length:
-                          COLS -
-                          pieces.slice(rowIdx * COLS, rowIdx * COLS + COLS)
-                            .length,
+          {inquiriesLoading ? (
+            <View style={s.loadingRow}>
+              <ActivityIndicator color={T.gold} size="small" />
+              <Text style={s.loadingTxt}>Loading inquiries...</Text>
+            </View>
+          ) : inquiries.length === 0 ? (
+            <View style={s.emptyBox}>
+              <Text style={s.emptyTxt}>No inquiries yet.</Text>
+              <TouchableOpacity
+                style={s.browseBtn}
+                onPress={() => router.push("/fragrance" as any)}
+                activeOpacity={0.85}
+              >
+                <Text style={s.browseBtnTxt}>Browse Fragrances →</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={s.inquiriesList}>
+              {inquiries.map((inq, i) => (
+                <View
+                  key={inq.id}
+                  style={[
+                    s.inquiryRow,
+                    i < inquiries.length - 1 && s.inquiryBorder,
+                  ]}
+                >
+                  <View style={s.inquiryLeft}>
+                    <Text style={s.inquiryName}>{inq.fragrance}</Text>
+                    <Text style={s.inquiryDetail}>
+                      {inq.volume} · {formatDate(inq.created_at)}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      s.inquiryStatus,
+                      inq.status === "responded" && {
+                        borderColor: T.greenBorder,
+                        backgroundColor: T.greenBg,
                       },
-                      (_, i) => (
-                        <View
-                          key={`empty-${i}`}
-                          style={[s.card, { opacity: 0 }]}
-                        />
-                      ),
-                    )}
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        s.inquiryStatusTxt,
+                        inq.status === "responded" && { color: T.green },
+                      ]}
+                    >
+                      {inq.status === "responded" ? "✦ Responded" : "Pending"}
+                    </Text>
+                  </View>
                 </View>
-              ),
-            )}
-          </View>
-        )}
+              ))}
+            </View>
+          )}
+        </View>
+
+        <View style={s.dividerLine} />
+
+        {/* ── Account ── */}
+        <View style={s.section}>
+          <Text style={s.sectionEye}>Account</Text>
+          {[
+            { label: "Email", val: user?.email || "—" },
+            {
+              label: "Auth provider",
+              val: user?.app_metadata?.provider || "email",
+            },
+            {
+              label: "Account ID",
+              val: user?.id?.substring(0, 12) + "..." || "—",
+            },
+          ].map(({ label, val }) => (
+            <View key={label} style={s.accountRow}>
+              <Text style={s.accountKey}>{label}</Text>
+              <Text style={s.accountVal}>{val}</Text>
+            </View>
+          ))}
+
+          <TouchableOpacity
+            style={s.signOutBlock}
+            onPress={signOut}
+            activeOpacity={0.85}
+          >
+            <Text style={s.signOutBlockTxt}>Sign Out</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={{ height: 60 }} />
       </ScrollView>
@@ -540,21 +372,26 @@ export default function ProfileScreen() {
   );
 }
 
-const GAP_N = GAP;
-
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.black },
+  root: { flex: 1, backgroundColor: T.bg },
+  centerFull: {
+    flex: 1,
+    backgroundColor: T.bg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   center: {
     flex: 1,
+    backgroundColor: T.bg,
     alignItems: "center",
     justifyContent: "center",
     padding: 32,
   },
 
   topBar: {
-    backgroundColor: C.charcoal,
+    backgroundColor: T.bg,
     borderBottomWidth: 1,
-    borderBottomColor: C.border,
+    borderBottomColor: T.border,
   },
   topBarInner: {
     flexDirection: "row",
@@ -563,144 +400,44 @@ const s = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
-  backTxt: { fontSize: 11, color: C.muted },
-  navEye: {
-    fontSize: 8,
-    letterSpacing: 3,
-    textTransform: "uppercase",
-    color: C.gold,
-    marginBottom: 2,
-  },
-  navTitle: {
+  topSpacer: { width: 60 },
+  backTxt: { fontSize: 11, color: T.textSub },
+  topLogo: {
     fontFamily: "serif",
-    fontSize: 18,
-    fontWeight: "900",
-    color: C.cream,
-  },
-  navTitleEm: { fontStyle: "italic", fontWeight: "400", color: C.goldLt },
-  navLink: { fontSize: 10, color: C.muted, letterSpacing: 0.5 },
-  topEye: {
-    fontSize: 11,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: C.gold,
-    fontWeight: "600",
-  },
-
-  profileHeader: {
-    alignItems: "center",
-    paddingVertical: 28,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-  },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: C.gold,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 10,
-  },
-  avatarTxt: { fontSize: 22, fontWeight: "700", color: C.black },
-  profileName: {
-    fontFamily: "serif",
-    fontSize: 18,
-    fontWeight: "900",
-    color: C.cream,
-    marginBottom: 3,
-  },
-  profileEmail: { fontSize: 11, color: C.muted },
-
-  walletStrip: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-    backgroundColor: C.charcoal,
-  },
-  walletStripLabel: {
-    fontSize: 8,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: C.gold,
-    marginBottom: 3,
-  },
-  walletStripAddr: { fontSize: 11, color: C.cream, fontFamily: "monospace" },
-  walletStripLink: {
-    fontSize: 9,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    color: C.muted,
-  },
-  noWalletStrip: {
-    padding: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-    backgroundColor: C.charcoal,
-  },
-  noWalletTxt: { fontSize: 11, color: C.muted, textAlign: "center" },
-
-  statsBar: {
-    flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-  },
-  statCell: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 10,
-    borderRightWidth: 1,
-    borderRightColor: C.border,
-  },
-  statVal: {
-    fontFamily: "serif",
-    fontSize: 20,
-    fontWeight: "700",
-    color: C.cream,
-  },
-  statLbl: {
-    fontSize: 7,
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
-    color: C.muted,
-    marginTop: 2,
-  },
-
-  loadTxt: {
-    marginTop: 10,
-    fontSize: 10,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: C.muted,
-  },
-  emptyTitle: {
     fontSize: 15,
-    color: C.cream,
-    fontWeight: "600",
-    marginBottom: 16,
+    fontWeight: "700",
+    color: T.text,
   },
+  topLogoEm: { fontStyle: "italic", fontWeight: "400", color: T.gold },
+  signOutTxt: { fontSize: 11, color: T.textMuted },
 
-  guestIcon: { fontSize: 44, marginBottom: 14 },
+  // Guest state
+  guestEye: {
+    fontSize: 8,
+    letterSpacing: 4,
+    textTransform: "uppercase",
+    color: T.gold,
+    marginBottom: 12,
+    textAlign: "center",
+  },
   guestTitle: {
     fontFamily: "serif",
-    fontSize: 22,
+    fontSize: 28,
     fontWeight: "900",
-    color: C.cream,
-    marginBottom: 8,
+    color: T.text,
+    marginBottom: 10,
     textAlign: "center",
   },
   guestSub: {
     fontSize: 13,
-    color: C.muted,
+    color: T.textSub,
     textAlign: "center",
-    lineHeight: 20,
-    marginBottom: 24,
+    lineHeight: 22,
+    marginBottom: 28,
+    maxWidth: 320,
   },
   signInBtn: {
-    backgroundColor: C.gold,
+    backgroundColor: T.gold,
     paddingHorizontal: 28,
     paddingVertical: 14,
     marginBottom: 12,
@@ -710,226 +447,222 @@ const s = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 2,
     textTransform: "uppercase",
-    color: C.black,
+    color: "#fff",
   },
-  browseBtn: {
+  ghostBtn: {
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: T.border,
     paddingHorizontal: 24,
     paddingVertical: 12,
   },
-  browseBtnTxt: {
+  ghostBtnTxt: {
     fontSize: 10,
     letterSpacing: 1.5,
     textTransform: "uppercase",
-    color: C.muted,
+    color: T.textSub,
   },
 
-  // Grid
-  grid: { padding: GAP_N, paddingBottom: 32 },
-  row: { flexDirection: "row", gap: GAP_N, marginBottom: GAP_N },
-  card: {
-    flex: 1,
-    backgroundColor: C.charcoal,
-    borderWidth: 1,
-    borderColor: C.border,
+  // Profile header
+  profileHeader: {
+    alignItems: "center",
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
   },
-
-  cardImg: {
-    aspectRatio: 1,
-    backgroundColor: C.warm,
+  avatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: T.gold,
     alignItems: "center",
     justifyContent: "center",
-    position: "relative",
-    overflow: "hidden",
+    marginBottom: 14,
   },
-  imgOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(12,11,9,0.08)",
+  avatarTxt: { fontSize: 22, fontWeight: "700", color: "#fff" },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
   },
-  cardInit: {
+  profileName: {
     fontFamily: "serif",
-    fontSize: 40,
+    fontSize: 20,
     fontWeight: "900",
-    color: "rgba(184,150,62,0.1)",
+    color: T.text,
   },
+  editIcon: { fontSize: 13, color: T.textMuted, marginTop: 2 },
+  profileEmail: { fontSize: 12, color: T.textSub, marginBottom: 4 },
+  memberSince: { fontSize: 10, color: T.textMuted, letterSpacing: 0.5 },
 
-  badgeColLeft: {
-    position: "absolute",
-    top: 6,
-    left: 6,
-    gap: 3,
-    maxWidth: "52%",
+  editNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
   },
-  badgeColRight: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    gap: 3,
-    alignItems: "flex-end",
-    maxWidth: "46%",
-  },
-
-  tokenBadge: {
-    backgroundColor: "rgba(12,11,9,0.88)",
+  nameInput: {
     borderWidth: 1,
-    borderColor: C.border,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
+    borderColor: T.border,
+    backgroundColor: T.bg,
+    color: T.text,
+    fontSize: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flex: 1,
   },
-  tokenBadgeTxt: {
-    fontSize: 6,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    color: C.gold,
+  saveNameBtn: {
+    backgroundColor: T.gold,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
   },
-  editionBadge: {
-    backgroundColor: "rgba(12,11,9,0.85)",
-    borderWidth: 1,
-    borderColor: C.borderBright,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-  },
-  editionBadgeTxt: {
-    fontSize: 6,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    color: C.goldLt,
-  },
-  rarityBadge: {
-    backgroundColor: "rgba(184,150,62,0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(184,150,62,0.45)",
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-  },
-  rarityBadgeTxt: {
-    fontSize: 6,
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-    color: C.goldLt,
+  saveNameTxt: {
+    fontSize: 10,
     fontWeight: "700",
-  },
-  rarityLabelBadge: {
-    backgroundColor: "rgba(184,150,62,0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(184,150,62,0.45)",
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-  },
-  rarityLabelTxt: {
-    fontSize: 6,
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-    color: C.goldLt,
-    fontWeight: "700",
-  },
-
-  claimedBadge: {
-    position: "absolute",
-    bottom: 6,
-    left: 6,
-    backgroundColor: "rgba(91,175,133,0.2)",
-    borderWidth: 1,
-    borderColor: "rgba(91,175,133,0.55)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  claimedBadgeTxt: {
-    fontSize: 6,
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-    color: C.green,
-    fontWeight: "600",
-  },
-  unclaimedBadge: {
-    position: "absolute",
-    bottom: 6,
-    left: 6,
-    backgroundColor: "rgba(192,97,74,0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(192,97,74,0.4)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  unclaimedBadgeTxt: {
-    fontSize: 6,
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-    color: "#C0614A",
-    fontWeight: "600",
-  },
-  nfcBadge: {
-    position: "absolute",
-    bottom: 6,
-    right: 6,
-    backgroundColor: "rgba(91,175,133,0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(91,175,133,0.4)",
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-  },
-  nfcBadgeTxt: {
-    fontSize: 6,
+    color: "#fff",
     letterSpacing: 1,
-    color: C.green,
-    fontWeight: "600",
   },
+  cancelNameBtn: { padding: 8 },
+  cancelNameTxt: { fontSize: 13, color: T.textMuted },
+  nameError: { fontSize: 11, color: T.red, marginTop: 4 },
 
-  cardBody: { padding: 10 },
-  cardSilhouette: {
-    fontSize: 7,
+  // Sections
+  section: { paddingHorizontal: 24, paddingVertical: 28 },
+  sectionEye: {
+    fontSize: 8,
+    letterSpacing: 4,
+    textTransform: "uppercase",
+    color: T.gold,
+    marginBottom: 6,
+  },
+  sectionTitle: {
+    fontFamily: "serif",
+    fontSize: 20,
+    fontWeight: "900",
+    color: T.text,
+    marginBottom: 20,
+  },
+  dividerLine: { height: 1, backgroundColor: T.border },
+
+  // Coming soon
+  comingSoonBox: {
+    borderWidth: 1,
+    borderColor: T.border,
+    backgroundColor: T.bgAlt,
+    padding: 24,
+    alignItems: "center",
+  },
+  comingSoonIcon: { fontSize: 24, color: T.gold, marginBottom: 10 },
+  comingSoonTitle: {
+    fontFamily: "serif",
+    fontSize: 18,
+    fontWeight: "700",
+    color: T.text,
+    marginBottom: 8,
+  },
+  comingSoonSub: {
+    fontSize: 13,
+    color: T.textSub,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  notifyBtn: {
+    borderWidth: 1,
+    borderColor: T.gold,
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+  },
+  notifyBtnTxt: {
+    fontSize: 9,
+    fontWeight: "700",
     letterSpacing: 2,
     textTransform: "uppercase",
-    color: C.gold,
-    marginBottom: 3,
+    color: T.gold,
   },
-  cardName: {
-    fontFamily: "serif",
-    fontSize: 12,
-    fontWeight: "700",
-    color: C.cream,
-    lineHeight: 16,
-    marginBottom: 3,
-  },
-  cardSub: { fontSize: 9, color: C.muted, letterSpacing: 0.5 },
 
-  cardFoot: {
+  // Inquiries
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 16,
+  },
+  loadingTxt: { fontSize: 11, color: T.textMuted },
+  emptyBox: { paddingVertical: 20, alignItems: "center" },
+  emptyTxt: { fontSize: 13, color: T.textMuted, marginBottom: 16 },
+  browseBtn: {
+    borderWidth: 1,
+    borderColor: T.border,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  browseBtnTxt: {
+    fontSize: 9,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: T.textSub,
+  },
+  inquiriesList: { borderWidth: 1, borderColor: T.border, overflow: "hidden" },
+  inquiryRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-    backgroundColor: C.warm,
+    padding: 14,
+    backgroundColor: T.bg,
   },
-  cardPrice: {
+  inquiryBorder: { borderBottomWidth: 1, borderBottomColor: T.border },
+  inquiryLeft: { flex: 1 },
+  inquiryName: {
     fontFamily: "serif",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
-    color: C.goldLt,
+    color: T.text,
+    marginBottom: 3,
   },
-  cardCurrency: {
-    fontSize: 7,
+  inquiryDetail: { fontSize: 10, color: T.textMuted, letterSpacing: 0.3 },
+  inquiryStatus: {
+    borderWidth: 1,
+    borderColor: T.border,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  inquiryStatusTxt: {
+    fontSize: 8,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: T.textMuted,
+    fontWeight: "600",
+  },
+
+  // Account
+  accountRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+  },
+  accountKey: {
+    fontSize: 9,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: T.textSub,
+  },
+  accountVal: { fontSize: 12, color: T.text, fontWeight: "500" },
+  signOutBlock: {
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: T.border,
+    padding: 13,
+    alignItems: "center",
+  },
+  signOutBlockTxt: {
+    fontSize: 10,
     letterSpacing: 2,
     textTransform: "uppercase",
-    color: C.muted,
-    marginTop: 1,
-  },
-  statusPill: { borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4 },
-  statusPillClaimed: {
-    backgroundColor: "rgba(91,175,133,0.1)",
-    borderColor: "rgba(91,175,133,0.4)",
-  },
-  statusPillUnclaimed: {
-    backgroundColor: "rgba(192,97,74,0.1)",
-    borderColor: "rgba(192,97,74,0.35)",
-  },
-  statusPillTxt: {
-    fontSize: 7,
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-    fontWeight: "600",
+    color: T.textMuted,
   },
 });

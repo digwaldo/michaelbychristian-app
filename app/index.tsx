@@ -294,6 +294,9 @@ export default function HomeScreen() {
   const NAV_LINKS = [
     { label: "Rarity", path: "/rarity", gold: true },
     { label: "Fragrances", path: "/fragrance", gold: true },
+    { label: "Sign In", path: "/auth" },
+    // or when logged in:
+    { label: "My Profile", path: "/profile" },
   ];
 
   const COLS = isPhone ? 2 : 3;

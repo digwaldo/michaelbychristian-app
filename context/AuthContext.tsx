@@ -1,157 +1,114 @@
-// context/AuthContext.tsx
-// Global auth + cart state — wrap your app with this
+// context/AuthContext.tsx — Auth provider (main branch)
+// Supabase auth: email/password + Google OAuth
 
-import { Session } from "@supabase/supabase-js";
+import { Session, User } from "@supabase/supabase-js";
+import { makeRedirectUri } from "expo-auth-session";
+import * as WebBrowser from "expo-web-browser";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { Platform } from "react-native";
-import { CartItem, Profile, supabase } from "../lib/supabase";
-import { BACKEND } from "../lib/theme";
+import { supabase } from "../lib/supabase";
 
-const GUEST_SESSION_KEY = "mbc_guest_session";
-
-// Platform-safe storage — localStorage on web, AsyncStorage on native
-async function storageGet(key: string): Promise<string | null> {
-  if (Platform.OS === "web") {
-    try {
-      return localStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  }
-  const AS = require("@react-native-async-storage/async-storage").default;
-  return AS.getItem(key);
-}
-
-async function storageSet(key: string, value: string): Promise<void> {
-  if (Platform.OS === "web") {
-    try {
-      localStorage.setItem(key, value);
-    } catch {}
-    return;
-  }
-  const AS = require("@react-native-async-storage/async-storage").default;
-  return AS.setItem(key, value);
-}
-
-// Generate or retrieve guest session ID
-async function getGuestSessionId(): Promise<string> {
-  let id = await storageGet(GUEST_SESSION_KEY);
-  if (!id) {
-    id = `guest_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    await storageSet(GUEST_SESSION_KEY, id);
-  }
-  return id;
-}
+WebBrowser.maybeCompleteAuthSession();
 
 interface AuthContextType {
   session: Session | null;
+  user: User | null;
   profile: Profile | null;
-  cart: CartItem[];
   loading: boolean;
-  guestSessionId: string | null;
-  // Auth
-  signInWithEmail: (email: string, password: string) => Promise<{ error: any }>;
+  signInWithEmail: (
+    email: string,
+    password: string,
+  ) => Promise<{ error: string | null }>;
   signUpWithEmail: (
     email: string,
     password: string,
     name: string,
-  ) => Promise<{ error: any }>;
-  signInWithGoogle: () => Promise<{ error: any }>;
+  ) => Promise<{ error: string | null }>;
+  signInWithGoogle: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
-  // Cart
-  addToCart: (
-    item: Omit<CartItem, "id" | "session_id" | "user_id" | "added_at">,
-  ) => Promise<void>;
-  removeFromCart: (tokenId: number) => Promise<void>;
-  clearCart: () => Promise<void>;
-  isInCart: (tokenId: number) => boolean;
-  cartTotal: number;
+  refreshProfile: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
+interface Profile {
+  id: string;
+  email: string;
+  name: string | null;
+  stellar_wallet_public: string | null;
+  created_at: string;
+}
+
+const AuthContext = createContext<AuthContextType>({
+  session: null,
+  user: null,
+  profile: null,
+  loading: true,
+  signInWithEmail: async () => ({ error: null }),
+  signUpWithEmail: async () => ({ error: null }),
+  signInWithGoogle: async () => ({ error: null }),
+  signOut: async () => {},
+  refreshProfile: async () => {},
+});
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [guestSessionId, setGuestSessionId] = useState<string | null>(null);
 
   useEffect(() => {
-    init();
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) loadProfile(session.user.id);
+      else setLoading(false);
+    });
+
+    // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
-      if (session?.user) loadProfile(session.user.id);
-      else setProfile(null);
+      setUser(session?.user ?? null);
+      if (session?.user) await loadProfile(session.user.id);
+      else {
+        setProfile(null);
+        setLoading(false);
+      }
     });
+
     return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(() => {
-    if (guestSessionId || session) loadCart();
-  }, [guestSessionId, session]);
-
-  async function init() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    setSession(session);
-    if (session?.user) await loadProfile(session.user.id);
-    const gid = await getGuestSessionId();
-    setGuestSessionId(gid);
-    setLoading(false);
-  }
-
   async function loadProfile(userId: string) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .single();
-    if (data) {
-      setProfile(data);
-      // Auto-create wallet if user doesn't have one yet
-      if (!data.stellar_wallet_public) {
-        try {
-          await fetch(`${BACKEND}/api/wallet`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id: userId }),
-          });
-          // Reload profile to get wallet
-          const { data: updated } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", userId)
-            .single();
-          if (updated) setProfile(updated);
-        } catch (e) {
-          console.log("Wallet auto-create failed:", e);
-        }
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+
+      if (error && error.code !== "PGRST116") {
+        console.log("Profile load error:", error.message);
       }
+      setProfile(data ?? null);
+    } catch (e) {
+      console.log("Profile load failed:", e);
+    } finally {
+      setLoading(false);
     }
   }
 
-  async function loadCart() {
-    let query = supabase.from("cart_items").select("*").order("added_at");
-    if (session?.user) {
-      query = query.eq("user_id", session.user.id);
-    } else if (guestSessionId) {
-      query = query.eq("session_id", guestSessionId);
-    }
-    const { data } = await query;
-    if (data) setCart(data);
-  }
-
-  // ── Auth ──────────────────────────────────────────────────────
   async function signInWithEmail(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { error };
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) return { error: error.message };
+      return { error: null };
+    } catch (e: any) {
+      return { error: e.message || "Sign in failed" };
+    }
   }
 
   async function signUpWithEmail(
@@ -159,125 +116,99 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     password: string,
     name: string,
   ) {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: name } },
-    });
-    if (!error) {
-      // Migrate guest cart to user after signup
-      if (guestSessionId) await migrateGuestCart();
-      // Auto-create Stellar wallet for new user
-      // We do this after a short delay to let the profile trigger run first
-      setTimeout(async () => {
-        try {
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
-          if (user) {
-            await fetch(`${BACKEND}/api/wallet`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ user_id: user.id }),
-            });
-            await loadProfile(user.id);
-          }
-        } catch (e) {
-          console.log("Wallet create failed:", e);
-        }
-      }, 1500);
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { name } },
+      });
+      if (error) return { error: error.message };
+
+      // Create profile row
+      if (data.user) {
+        const { error: profileError } = await supabase.from("profiles").upsert({
+          id: data.user.id,
+          email: email.toLowerCase(),
+          name: name.trim(),
+          stellar_wallet_public: null,
+          created_at: new Date().toISOString(),
+        });
+        if (profileError)
+          console.log("Profile create error:", profileError.message);
+      }
+
+      return { error: null };
+    } catch (e: any) {
+      return { error: e.message || "Sign up failed" };
     }
-    return { error };
   }
 
   async function signInWithGoogle() {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo:
-          Platform.OS === "web"
-            ? `${window.location.origin}/auth/callback`
-            : "michaelbychristian://auth/callback",
-      },
-    });
-    return { error };
+    try {
+      const redirectTo = makeRedirectUri({ scheme: "michaelbychristian" });
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+        },
+      });
+
+      if (error) return { error: error.message };
+      if (!data.url) return { error: "No OAuth URL returned" };
+
+      const result = await WebBrowser.openAuthSessionAsync(
+        data.url,
+        redirectTo,
+      );
+
+      if (result.type === "success" && result.url) {
+        const url = new URL(result.url);
+        const accessToken =
+          url.searchParams.get("access_token") ??
+          url.hash.match(/access_token=([^&]+)/)?.[1];
+        const refreshToken =
+          url.searchParams.get("refresh_token") ??
+          url.hash.match(/refresh_token=([^&]+)/)?.[1];
+
+        if (accessToken && refreshToken) {
+          await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+        }
+      }
+
+      return { error: null };
+    } catch (e: any) {
+      return { error: e.message || "Google sign in failed" };
+    }
   }
 
   async function signOut() {
     await supabase.auth.signOut();
+    setSession(null);
+    setUser(null);
     setProfile(null);
-    setCart([]);
   }
 
-  // ── Cart ──────────────────────────────────────────────────────
-  async function addToCart(
-    item: Omit<CartItem, "id" | "session_id" | "user_id" | "added_at">,
-  ) {
-    // Check not already in cart
-    if (isInCart(item.token_id)) return;
-
-    const row = {
-      ...item,
-      user_id: session?.user?.id || null,
-      session_id: session?.user ? null : guestSessionId,
-    };
-
-    const { data } = await supabase
-      .from("cart_items")
-      .insert(row)
-      .select()
-      .single();
-    if (data) setCart((prev) => [...prev, data]);
+  async function refreshProfile() {
+    if (user) await loadProfile(user.id);
   }
-
-  async function removeFromCart(tokenId: number) {
-    let query = supabase.from("cart_items").delete().eq("token_id", tokenId);
-    if (session?.user) query = query.eq("user_id", session.user.id);
-    else if (guestSessionId) query = query.eq("session_id", guestSessionId);
-    await query;
-    setCart((prev) => prev.filter((i) => i.token_id !== tokenId));
-  }
-
-  async function clearCart() {
-    let query = supabase.from("cart_items").delete();
-    if (session?.user) query = query.eq("user_id", session.user.id);
-    else if (guestSessionId) query = query.eq("session_id", guestSessionId);
-    await query;
-    setCart([]);
-  }
-
-  async function migrateGuestCart() {
-    if (!guestSessionId || !session?.user) return;
-    await supabase
-      .from("cart_items")
-      .update({ user_id: session.user.id, session_id: null })
-      .eq("session_id", guestSessionId);
-    await loadCart();
-  }
-
-  function isInCart(tokenId: number) {
-    return cart.some((i) => i.token_id === tokenId);
-  }
-
-  const cartTotal = cart.reduce((sum, i) => sum + i.price, 0);
 
   return (
     <AuthContext.Provider
       value={{
         session,
+        user,
         profile,
-        cart,
         loading,
-        guestSessionId,
         signInWithEmail,
         signUpWithEmail,
         signInWithGoogle,
         signOut,
-        addToCart,
-        removeFromCart,
-        clearCart,
-        isInCart,
-        cartTotal,
+        refreshProfile,
       }}
     >
       {children}
@@ -285,8 +216,4 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
-}
+export const useAuth = () => useContext(AuthContext);
