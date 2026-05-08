@@ -13,7 +13,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -505,7 +505,7 @@ export default function FragranceDetailScreen() {
           <Text style={[s.sectionLbl, { color: f.accent }]}>
             The Collection
           </Text>
-          <View style={s.collectionRow}>
+          <View style={s.collectionGrid}>
             {Object.entries(FRAGRANCES).map(([key, frag]: [string, any]) => (
               <TouchableOpacity
                 key={key}
@@ -849,9 +849,14 @@ const s = StyleSheet.create({
     flex: 1,
   },
 
-  collectionRow: { flexDirection: "row", gap: 10, paddingBottom: 4 },
+  collectionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    paddingBottom: 4,
+  },
   collCard: {
-    width: 130,
+    width: "47%",
     borderWidth: 1,
     borderColor: T.border,
     padding: 14,
