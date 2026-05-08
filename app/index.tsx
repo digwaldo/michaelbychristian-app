@@ -252,6 +252,7 @@ function HeroVideo({ style }: { style: any }) {
     return (
       // @ts-ignore
       <video
+        id="mbc-hero-video"
         src="hero-video.mp4"
         autoPlay
         muted
@@ -261,17 +262,22 @@ function HeroVideo({ style }: { style: any }) {
         ref={(el: any) => {
           if (!el) return;
           el.muted = true;
+          el.defaultMuted = true;
           el.setAttribute("muted", "");
           el.setAttribute("playsinline", "");
           el.setAttribute("webkit-playsinline", "");
-          const tryPlay = () => el.play().catch(() => {});
-          tryPlay();
-          // Retry on first user interaction for iOS
-          const onTouch = () => {
-            tryPlay();
-            document.removeEventListener("touchstart", onTouch);
+          // Try immediately
+          el.play().catch(() => {});
+          // iOS Safari: must call play() synchronously inside touch handler
+          const unlock = () => {
+            el.play().catch(() => {});
+            ["touchstart", "touchend", "click"].forEach((e) =>
+              document.removeEventListener(e, unlock),
+            );
           };
-          document.addEventListener("touchstart", onTouch, { once: true });
+          ["touchstart", "touchend", "click"].forEach((e) =>
+            document.addEventListener(e, unlock, { once: true, passive: true }),
+          );
         }}
         style={{
           width: "100%",
