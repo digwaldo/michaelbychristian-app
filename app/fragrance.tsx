@@ -3,6 +3,7 @@
 import { router } from "expo-router";
 import React from "react";
 import {
+  Image,
   Platform,
   ScrollView,
   StyleSheet,
@@ -170,31 +171,13 @@ export default function FragranceScreen() {
               }
               activeOpacity={0.88}
             >
-              {/* Bottle visual */}
-              <View style={[s.bottleWrap, { backgroundColor: f.bottleBg }]}>
-                <View style={s.bottleInner}>
-                  <View style={[s.bottleCap, { backgroundColor: f.accent }]} />
-                  <View
-                    style={[s.bottleNeck, { borderColor: f.accent + "55" }]}
-                  />
-                  <View
-                    style={[s.bottleBody, { borderColor: f.accent + "44" }]}
-                  >
-                    <View
-                      style={[
-                        s.liquidFill,
-                        {
-                          backgroundColor: f.accent + "18",
-                          height: "55%" as any,
-                        },
-                      ]}
-                    />
-                    <Text style={[s.bottleName, { color: f.accent }]}>
-                      {f.name}
-                    </Text>
-                    <Text style={s.bottleBrand}>MBC</Text>
-                  </View>
-                </View>
+              {/* Bottle image */}
+              <View style={s.bottleWrap}>
+                <Image
+                  source={require("../assets/perfume_bottle.png")}
+                  style={s.bottleImg}
+                  resizeMode="contain"
+                />
                 <Text style={[s.bottleNumber, { color: f.accent }]}>
                   {f.number}
                 </Text>
@@ -341,49 +324,12 @@ const s = StyleSheet.create({
   bottleWrap: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 32,
+    paddingVertical: 24,
     borderBottomWidth: 1,
     borderBottomColor: "#0C0B09",
     backgroundColor: "#0C0B09",
   },
-  bottleInner: { alignItems: "center" },
-  bottleCap: { width: 36, height: 10, borderRadius: 2 },
-  bottleNeck: {
-    width: 26,
-    height: 24,
-    borderWidth: 1,
-    borderBottomWidth: 0,
-    borderRadius: 2,
-    backgroundColor: "rgba(212,175,106,0.08)",
-  },
-  bottleBody: {
-    width: 70,
-    height: 110,
-    borderWidth: 1,
-    borderRadius: 4,
-    overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    paddingBottom: 12,
-    position: "relative",
-    backgroundColor: "rgba(212,175,106,0.04)",
-  },
-  liquidFill: { position: "absolute", bottom: 0, left: 0, right: 0 },
-  bottleName: {
-    fontSize: 9,
-    fontFamily: "serif",
-    fontStyle: "italic",
-    letterSpacing: 1,
-    zIndex: 1,
-  },
-  bottleBrand: {
-    fontSize: 6,
-    letterSpacing: 3,
-    textTransform: "uppercase",
-    color: "rgba(212,175,106,0.5)",
-    marginTop: 2,
-    zIndex: 1,
-  },
+  bottleImg: { width: 120, height: 160 },
   bottleNumber: {
     fontSize: 8,
     letterSpacing: 3,

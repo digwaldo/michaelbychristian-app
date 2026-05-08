@@ -257,15 +257,21 @@ function HeroVideo({ style }: { style: any }) {
         muted
         loop
         playsInline
-        // @ts-ignore
-        webkit-playsinline="true"
-        disablePictureInPicture
         preload="auto"
         ref={(el: any) => {
-          if (el) {
-            el.muted = true;
-            el.play().catch(() => {});
-          }
+          if (!el) return;
+          el.muted = true;
+          el.setAttribute("muted", "");
+          el.setAttribute("playsinline", "");
+          el.setAttribute("webkit-playsinline", "");
+          const tryPlay = () => el.play().catch(() => {});
+          tryPlay();
+          // Retry on first user interaction for iOS
+          const onTouch = () => {
+            tryPlay();
+            document.removeEventListener("touchstart", onTouch);
+          };
+          document.addEventListener("touchstart", onTouch, { once: true });
         }}
         style={{
           width: "100%",

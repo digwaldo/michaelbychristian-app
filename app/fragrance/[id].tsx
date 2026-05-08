@@ -5,6 +5,7 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -275,30 +276,23 @@ export default function FragranceDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Hero */}
         <View style={IS_WIDE ? s.heroRow : s.heroCol}>
-          {/* Bottle — dark panel */}
+          {/* Bottle — dark panel with real image */}
           <View style={IS_WIDE ? s.bottlePanelWeb : s.bottlePanelMobile}>
-            <View style={s.bottleScene}>
-              <View style={[s.bottleCap, { backgroundColor: f.accent }]} />
-              <View style={[s.bottleNeck, { borderColor: f.accent + "55" }]} />
-              <View style={[s.bottleBody, { borderColor: f.accent + "44" }]}>
-                <View
-                  style={[
-                    s.liquidFill,
-                    {
-                      backgroundColor: f.accent + "1A",
-                      height: (vol === 50 ? "72%" : "52%") as any,
-                    },
-                  ]}
-                />
-                <View style={s.bottleLabelWrap}>
-                  <Text style={[s.bottleLabelName, { color: f.accent }]}>
-                    {f.name}
-                  </Text>
-                  <Text style={s.bottleLabelBrand}>MBC · {f.number}</Text>
-                </View>
-              </View>
+            <View style={s.bottleImgWrap}>
+              <Image
+                source={require("../../assets/perfume_bottle.png")}
+                style={s.bottleImg}
+                resizeMode="contain"
+              />
             </View>
-            <Text style={s.bottleVolTxt}>{vol} ml</Text>
+            <View style={s.bottleTagRow}>
+              <Text style={[s.bottleTagName, { color: f.accent }]}>
+                {f.name}
+              </Text>
+              <Text style={s.bottleTagSub}>
+                {f.number} · {vol}ml
+              </Text>
+            </View>
           </View>
 
           {/* Info — white panel */}
@@ -603,59 +597,36 @@ const s = StyleSheet.create({
     width: "45%",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 52,
+    paddingVertical: 40,
     backgroundColor: "#0C0B09",
   },
   bottlePanelMobile: {
     width: "100%",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 48,
+    paddingVertical: 36,
     backgroundColor: "#0C0B09",
   },
-  bottleScene: { alignItems: "center" },
-  bottleCap: { width: 40, height: 12, borderRadius: 2 },
-  bottleNeck: {
-    width: 28,
-    height: 26,
-    borderWidth: 1,
-    borderBottomWidth: 0,
-    borderRadius: 2,
-    backgroundColor: "rgba(212,175,106,0.08)",
-  },
-  bottleBody: {
-    width: 80,
-    height: 140,
-    borderWidth: 1,
-    borderRadius: 6,
-    overflow: "hidden",
+  bottleImgWrap: {
+    width: 200,
+    height: 280,
     alignItems: "center",
-    justifyContent: "flex-end",
-    paddingBottom: 12,
-    position: "relative",
-    backgroundColor: "rgba(212,175,106,0.04)",
+    justifyContent: "center",
   },
-  liquidFill: { position: "absolute", bottom: 0, left: 0, right: 0 },
-  bottleLabelWrap: { alignItems: "center", zIndex: 1 },
-  bottleLabelName: {
-    fontSize: 10,
+  bottleImg: { width: "100%", height: "100%" },
+  bottleTagRow: { alignItems: "center", marginTop: 16 },
+  bottleTagName: {
     fontFamily: "serif",
+    fontSize: 16,
     fontStyle: "italic",
     letterSpacing: 1,
+    marginBottom: 4,
   },
-  bottleLabelBrand: {
-    fontSize: 6,
-    letterSpacing: 3,
-    textTransform: "uppercase",
-    color: "rgba(212,175,106,0.5)",
-    marginTop: 2,
-  },
-  bottleVolTxt: {
+  bottleTagSub: {
     fontSize: 9,
     letterSpacing: 3,
     textTransform: "uppercase",
-    marginTop: 16,
-    color: "rgba(212,175,106,0.7)",
+    color: "rgba(212,175,106,0.6)",
   },
 
   infoPanelWeb: {
