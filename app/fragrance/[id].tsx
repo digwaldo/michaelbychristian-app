@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -16,6 +17,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const IS_WEB = Platform.OS === "web";
+const { width: SCREEN_W } = Dimensions.get("window");
+const IS_WIDE = IS_WEB && SCREEN_W >= 768;
 
 const T = {
   bg: "#FFFFFF",
@@ -220,9 +223,9 @@ export default function FragranceDetailScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Hero */}
-        <View style={IS_WEB ? s.heroRow : s.heroCol}>
+        <View style={IS_WIDE ? s.heroRow : s.heroCol}>
           {/* Bottle — dark panel */}
-          <View style={IS_WEB ? s.bottlePanelWeb : s.bottlePanelMobile}>
+          <View style={IS_WIDE ? s.bottlePanelWeb : s.bottlePanelMobile}>
             <View style={s.bottleScene}>
               <View style={[s.bottleCap, { backgroundColor: f.accent }]} />
               <View style={[s.bottleNeck, { borderColor: f.accent + "55" }]} />
@@ -248,7 +251,7 @@ export default function FragranceDetailScreen() {
           </View>
 
           {/* Info — white panel */}
-          <View style={IS_WEB ? s.infoPanelWeb : s.infoPanelMobile}>
+          <View style={IS_WIDE ? s.infoPanelWeb : s.infoPanelMobile}>
             <Text style={[s.heroNumber, { color: f.accent }]}>
               Michael Christian Fragrances · {f.number}
             </Text>
@@ -400,14 +403,14 @@ export default function FragranceDetailScreen() {
           <Text style={[s.sectionLbl, { color: f.accent }]}>
             Olfactory Composition
           </Text>
-          <View style={IS_WEB ? s.pyramidRow : s.pyramidCol}>
+          <View style={IS_WIDE ? s.pyramidRow : s.pyramidCol}>
             {NOTES.map((note, i) => (
               <View
                 key={i}
                 style={[
-                  IS_WEB ? s.noteCardWeb : s.noteCardMobile,
-                  IS_WEB && i < 2 ? s.noteCardBorderRight : null,
-                  !IS_WEB && i < 2 ? s.noteCardBorderBottom : null,
+                  IS_WIDE ? s.noteCardWeb : s.noteCardMobile,
+                  IS_WIDE && i < 2 ? s.noteCardBorderRight : null,
+                  !IS_WIDE && i < 2 ? s.noteCardBorderBottom : null,
                 ]}
               >
                 <View style={s.noteTierRow}>
@@ -442,7 +445,7 @@ export default function FragranceDetailScreen() {
                 key={i}
                 style={[
                   s.detailRow,
-                  IS_WEB ? s.detailRowHalf : null,
+                  IS_WIDE ? s.detailRowHalf : null,
                   i % 2 !== 0 ? { backgroundColor: T.bgAlt } : null,
                 ]}
               >
@@ -777,13 +780,14 @@ const s = StyleSheet.create({
     marginBottom: 8,
   },
   noteTier: {
-    fontSize: 9,
-    letterSpacing: 1.5,
+    fontSize: 8,
+    letterSpacing: 1,
     textTransform: "uppercase",
     color: T.textSub,
     fontWeight: "600",
+    flexShrink: 1,
   },
-  noteTiming: { fontSize: 9, color: T.textMuted },
+  noteTiming: { fontSize: 8, color: T.textMuted, flexShrink: 0 },
   noteNotes: { fontSize: 13, color: T.text, marginBottom: 12, lineHeight: 20 },
   durationBar: { height: 2, backgroundColor: T.bgDeep },
   durationFill: { height: 2 },
@@ -812,8 +816,16 @@ const s = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase",
     color: T.textSub,
+    flex: 1,
+    marginRight: 8,
   },
-  detailVal: { fontSize: 12, color: T.text, fontWeight: "500" },
+  detailVal: {
+    fontSize: 12,
+    color: T.text,
+    fontWeight: "500",
+    textAlign: "right",
+    flex: 1,
+  },
 
   collectionRow: { flexDirection: "row", gap: 10 },
   collCard: {

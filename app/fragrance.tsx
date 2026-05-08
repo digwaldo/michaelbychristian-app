@@ -278,7 +278,7 @@ const s = StyleSheet.create({
 
   content: { paddingHorizontal: 20 },
 
-  hero: { paddingTop: 36, paddingBottom: 28 },
+  hero: { paddingTop: 28, paddingBottom: 20 },
   heroEye: {
     fontSize: 8,
     letterSpacing: 4,
@@ -312,7 +312,8 @@ const s = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 32,
     borderBottomWidth: 1,
-    borderBottomColor: T.border,
+    borderBottomColor: "#0C0B09",
+    backgroundColor: "#0C0B09",
   },
   bottleInner: { alignItems: "center" },
   bottleCap: { width: 36, height: 10, borderRadius: 2 },
@@ -322,7 +323,7 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderBottomWidth: 0,
     borderRadius: 2,
-    backgroundColor: "transparent",
+    backgroundColor: "rgba(212,175,106,0.08)",
   },
   bottleBody: {
     width: 70,
@@ -334,7 +335,7 @@ const s = StyleSheet.create({
     justifyContent: "flex-end",
     paddingBottom: 12,
     position: "relative",
-    backgroundColor: "transparent",
+    backgroundColor: "rgba(212,175,106,0.04)",
   },
   liquidFill: { position: "absolute", bottom: 0, left: 0, right: 0 },
   bottleName: {
@@ -348,7 +349,7 @@ const s = StyleSheet.create({
     fontSize: 6,
     letterSpacing: 3,
     textTransform: "uppercase",
-    color: T.textMuted,
+    color: "rgba(212,175,106,0.5)",
     marginTop: 2,
     zIndex: 1,
   },
@@ -358,9 +359,10 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     marginTop: 12,
     fontWeight: "600",
+    color: "rgba(212,175,106,0.7)",
   },
 
-  cardInfo: { padding: 20 },
+  cardInfo: { padding: 16 },
   cardHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -410,12 +412,13 @@ const s = StyleSheet.create({
     borderBottomColor: T.border,
   },
   noteLabel: {
-    fontSize: 8,
-    letterSpacing: 2,
+    fontSize: 7,
+    letterSpacing: 1,
     textTransform: "uppercase",
-    width: 36,
+    width: 40,
     marginRight: 8,
     fontWeight: "600",
+    flexShrink: 0,
   },
   noteVal: { fontSize: 11, color: T.text, flex: 1 },
 
