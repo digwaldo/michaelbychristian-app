@@ -2,6 +2,7 @@
 
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
+import { VideoView, useVideoPlayer } from "expo-video";
 // Video: set VIDEO_URL below when ready to add hero video
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -252,6 +253,12 @@ export default function HomeScreen() {
   const [menuOpen, setMenuOpen] = useState(false);
   const { session } = useAuth();
 
+  const player = useVideoPlayer(require("../assets/hero-video.mp4"), (p) => {
+    p.loop = true;
+    p.muted = true;
+    p.play();
+  });
+
   const fade = useRef(new Animated.Value(0)).current;
   const slideY = useRef(new Animated.Value(24)).current;
   // Video hosted remotely — swap in your CDN/IPFS URL here
@@ -367,8 +374,13 @@ export default function HomeScreen() {
         <View style={s.heroSection}>
           <View style={[s.heroFrame, { height: heroH, width: "100%" }]}>
             <View style={s.heroMedia}>
-              {/* Hero background */}
-              <View style={[s.heroVideo, { backgroundColor: "#0C0B09" }]} />
+              <VideoView
+                player={player}
+                style={s.heroVideo}
+                contentFit="cover"
+                nativeControls={false}
+                allowsFullscreen={false}
+              />
             </View>
             <LinearGradient
               colors={
