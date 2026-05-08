@@ -75,6 +75,37 @@ const FRAGRANCES = [
     accent: "#4A5C6B",
     bottleBg: "#F0F4F7",
   },
+  {
+    id: "beanie",
+    name: "Beanie",
+    number: "No. 04",
+    type: "Aromatic Woody Chypre",
+    concentration: "Parfum · 30%",
+    desc: "A clean, mineral aromatic with a salty heart and warm earthy drydown. Juniper and Neroli open bright and fresh, settling into Orris, Tonka, and Labdanum.",
+    topNotes: "Juniper Berry · Neroli · Apple Essence",
+    heartNotes: "Dreamwood · Hedione · Sea Salt",
+    baseNotes: "Orris Butter · Tonka Bean · Labdanum · Benzoin · Iso E Super",
+    price30: 175,
+    price50: 255,
+    accent: "#5C6B4A",
+    bottleBg: "#F0F4EE",
+  },
+  {
+    id: "joopiter",
+    name: "Joopiter",
+    number: "No. 05",
+    type: "Solar Citrus Oriental",
+    concentration: "Parfum · 30%",
+    desc: "A sun-drenched citrus oriental — Red Grapefruit, Bergamot, and Lemon opening into Jasmine and Orange, drying down to Frankincense, Ambroxan, and Tonka.",
+    topNotes: "Red Grapefruit · Lemon · Bergamot · Apple Essence",
+    heartNotes: "Jasmine · Orange Sweet · Hedione · Heliotrope",
+    baseNotes:
+      "Frankincense · Ambroxan · Tonka Bean · Vanilla · Cardamom · Patchouli",
+    price30: 185,
+    price50: 265,
+    accent: "#8C6A1A",
+    bottleBg: "#FDF8EE",
+  },
 ];
 
 export default function FragranceScreen() {
