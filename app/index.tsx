@@ -2,7 +2,6 @@
 
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { VideoView, useVideoPlayer } from "expo-video";
 // Video: set VIDEO_URL below when ready to add hero video
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -247,17 +246,61 @@ const ts = StyleSheet.create({
   },
 });
 
+// ── HeroVideo — web uses HTML5 <video>, native uses expo-video ──
+function HeroVideo({ style }: { style: any }) {
+  if (Platform.OS === "web") {
+    return (
+      // @ts-ignore
+      <video
+        src="hero-video.mp4"
+        autoPlay
+        muted
+        loop
+        playsInline
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+        }}
+      />
+    );
+  }
+  return <NativeVideo style={style} />;
+}
+
+function NativeVideo({ style }: { style: any }) {
+  const { VideoView, useVideoPlayer } = require("expo-video");
+  const player = useVideoPlayer(
+    require("../assets/hero-video.mp4"),
+    (p: any) => {
+      p.loop = true;
+      p.muted = true;
+      p.play();
+    },
+  );
+  return (
+    <VideoView
+      player={player}
+      style={style}
+      contentFit="cover"
+      nativeControls={false}
+      allowsFullscreen={false}
+    />
+  );
+}
+
 export default function HomeScreen() {
   const layout = useClientLayout();
   const { w, h, isPhone, isTablet, isWeb, isWebWide } = layout;
   const [menuOpen, setMenuOpen] = useState(false);
   const { session } = useAuth();
 
-  const player = useVideoPlayer(require("../assets/hero-video.mp4"), (p) => {
-    p.loop = true;
-    p.muted = true;
-    p.play();
-  });
+  // Video handled per-platform in render
 
   const fade = useRef(new Animated.Value(0)).current;
   const slideY = useRef(new Animated.Value(24)).current;
@@ -374,13 +417,7 @@ export default function HomeScreen() {
         <View style={s.heroSection}>
           <View style={[s.heroFrame, { height: heroH, width: "100%" }]}>
             <View style={s.heroMedia}>
-              <VideoView
-                player={player}
-                style={s.heroVideo}
-                contentFit="cover"
-                nativeControls={false}
-                allowsFullscreen={false}
-              />
+              <HeroVideo style={s.heroVideo} />
             </View>
             <LinearGradient
               colors={
