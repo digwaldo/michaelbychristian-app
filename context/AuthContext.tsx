@@ -3,6 +3,7 @@
 
 import { Session, User } from "@supabase/supabase-js";
 import { makeRedirectUri } from "expo-auth-session";
+import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Platform } from "react-native";
@@ -202,6 +203,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
     setUser(null);
     setProfile(null);
+    router.replace("/" as any);
   }
 
   async function refreshProfile() {

@@ -169,7 +169,9 @@ export default function ProfileScreen() {
       <SafeAreaView edges={["top"]} style={s.topBar}>
         <View style={s.topBarInner}>
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() =>
+              router.canGoBack() ? router.back() : router.replace("/" as any)
+            }
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Text style={s.backTxt}>← Back</Text>
