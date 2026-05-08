@@ -849,9 +849,9 @@ const s = StyleSheet.create({
     flex: 1,
   },
 
-  collectionRow: { flexDirection: "row", gap: 10 },
+  collectionRow: { flexDirection: "row", gap: 10, paddingBottom: 4 },
   collCard: {
-    flex: 1,
+    width: 130,
     borderWidth: 1,
     borderColor: T.border,
     padding: 14,
