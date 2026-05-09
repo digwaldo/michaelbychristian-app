@@ -61,6 +61,12 @@ const FRAGRANCES: Record<string, any> = {
     season: "Spring · Summer",
     finish: "Polished Crystal",
     accent: "#B8963E",
+    inspiration: {
+      title: "Xerjoff Erba Pura",
+      house: "Xerjoff",
+      year: "2019",
+      note: "Sweet Veil draws from the luminous transparency of Erba Pura — its signature Hedione-driven floral heart and sun-drenched citrus opening — reinterpreted through a more intimate, skin-close lens with deeper musk anchoring.",
+    },
   },
   aladdin: {
     name: "Aladdin",
@@ -86,6 +92,12 @@ const FRAGRANCES: Record<string, any> = {
     season: "Fall · Winter",
     finish: "Polished Crystal",
     accent: "#8C4A2A",
+    inspiration: {
+      title: "Creed Aventus",
+      house: "Creed",
+      year: "2010",
+      note: "Aladdin takes the smoky, fruited boldness of Aventus and pivots it eastward — replacing the pineapple and birch with saffron and oud, pulling the DNA deeper into the oriental tradition while keeping the same commanding projection.",
+    },
   },
   beanie: {
     name: "Beanie",
@@ -111,6 +123,7 @@ const FRAGRANCES: Record<string, any> = {
     season: "Fall · Winter · Spring",
     finish: "Polished Crystal",
     accent: "#5C6B4A",
+    inspiration: null,
   },
   joopiter: {
     name: "Joopiter",
@@ -137,6 +150,12 @@ const FRAGRANCES: Record<string, any> = {
     season: "Spring · Summer · Fall",
     finish: "Polished Crystal",
     accent: "#8C6A1A",
+    inspiration: {
+      title: "Joop! Homme",
+      house: "Joop!",
+      year: "1989",
+      note: "Joopiter was built as a modern reinterpretation of the classic Joop! Homme DNA — that warm, oriental-oriental amber and vanilla core — lifted and brightened with a citrus-heavy opening and Frankincense drydown that takes it somewhere more refined.",
+    },
   },
   "homme-parfum": {
     name: "Homme Parfum",
@@ -162,6 +181,12 @@ const FRAGRANCES: Record<string, any> = {
     season: "All seasons",
     finish: "Polished Crystal",
     accent: "#4A5C6B",
+    inspiration: {
+      title: "Dior Homme",
+      house: "Dior",
+      year: "2005",
+      note: "Homme Parfum was shaped by the austere iris-forward masculinity of Dior Homme 2005 — that powdery, almost androgynous cleanness. The fougère structure and cedarwood base are a direct conversation with that classic, pushed to a higher concentration.",
+    },
   },
 };
 
@@ -499,6 +524,67 @@ export default function FragranceDetailScreen() {
               </View>
             ))}
           </View>
+
+          {/* Inspiration */}
+          {f.inspiration && (
+            <>
+              <View style={s.rule} />
+              <Text style={[s.sectionLbl, { color: f.accent }]}>
+                Inspiration
+              </Text>
+              <View style={s.inspirationBox}>
+                <View style={s.inspirationHeader}>
+                  <View
+                    style={[s.inspirationAccent, { backgroundColor: f.accent }]}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.inspirationTitle}>
+                      {f.inspiration.title}
+                    </Text>
+                    <Text style={s.inspirationMeta}>
+                      {f.inspiration.house} · {f.inspiration.year}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={s.inspirationNote}>{f.inspiration.note}</Text>
+                <View style={s.inspirationDisclaimer}>
+                  <Text style={s.inspirationDisclaimerTxt}>
+                    MBC fragrances are original compositions inspired by the
+                    character of classic works — not reproductions or affiliated
+                    with the referenced houses.
+                  </Text>
+                </View>
+              </View>
+            </>
+          )}
+
+          {f.inspiration === null && (
+            <>
+              <View style={s.rule} />
+              <Text style={[s.sectionLbl, { color: f.accent }]}>
+                Inspiration
+              </Text>
+              <View style={s.inspirationBox}>
+                <View style={s.inspirationHeader}>
+                  <View
+                    style={[s.inspirationAccent, { backgroundColor: f.accent }]}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.inspirationTitle}>Original Composition</Text>
+                    <Text style={s.inspirationMeta}>
+                      Michael By Christian · 2024
+                    </Text>
+                  </View>
+                </View>
+                <Text style={s.inspirationNote}>
+                  Beanie is an original MBC creation with no external reference
+                  — built entirely from scratch around the interplay of Juniper
+                  Berry, Sea Salt, and Orris Butter. A scent that belongs to no
+                  category but its own.
+                </Text>
+              </View>
+            </>
+          )}
 
           {/* Collection */}
           <View style={s.rule} />
@@ -847,6 +933,57 @@ const s = StyleSheet.create({
     fontWeight: "500",
     textAlign: "right",
     flex: 1,
+  },
+
+  inspirationBox: {
+    borderWidth: 1,
+    borderColor: T.border,
+    overflow: "hidden",
+    marginBottom: 4,
+  },
+  inspirationHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
+    padding: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+    backgroundColor: T.bgAlt,
+  },
+  inspirationAccent: {
+    width: 3,
+    height: "100%",
+    minHeight: 40,
+    borderRadius: 2,
+    flexShrink: 0,
+    marginTop: 2,
+  },
+  inspirationTitle: {
+    fontFamily: "serif",
+    fontSize: 16,
+    fontWeight: "700",
+    color: T.text,
+    marginBottom: 3,
+  },
+  inspirationMeta: {
+    fontSize: 9,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: T.textMuted,
+  },
+  inspirationNote: {
+    fontSize: 13,
+    color: T.textSub,
+    lineHeight: 22,
+    padding: 18,
+    backgroundColor: T.bg,
+  },
+  inspirationDisclaimer: { padding: 12, paddingTop: 0, paddingHorizontal: 18 },
+  inspirationDisclaimerTxt: {
+    fontSize: 10,
+    color: T.textMuted,
+    lineHeight: 16,
+    fontStyle: "italic",
   },
 
   collectionGrid: {
