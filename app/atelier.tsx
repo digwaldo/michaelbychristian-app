@@ -309,10 +309,34 @@ function NotifyForm({
 
 // ── Main screen ───────────────────────────────────────────────
 export default function AtelierScreen() {
-  const { user, session } = useAuth();
+  const { user, session, loading } = useAuth();
   const [selectedColorways, setSelectedColorways] = useState<
     Record<string, number>
   >({});
+
+  // Auth gate — redirect if not signed in
+  useEffect(() => {
+    if (!loading && !session) {
+      router.replace("/auth" as any);
+    }
+  }, [loading, session]);
+
+  if (loading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: T.bg,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <ActivityIndicator color={T.gold} size="large" />
+      </View>
+    );
+  }
+
+  if (!session) return null;
   const [likes, setLikes] = useState<Record<string, boolean>>({});
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
   const [notifyForm, setNotifyForm] = useState<{
