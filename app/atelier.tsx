@@ -442,13 +442,16 @@ export default function AtelierScreen() {
 
             return (
               <View key={piece.id} style={s.card}>
-                {/* Dark image panel — like fragrance bottle wrap */}
+                {/* Dark image panel — all colorways preloaded, only active shown */}
                 <View style={[s.imageWrap, { backgroundColor: piece.imageBg }]}>
-                  <Image
-                    source={cw.image}
-                    style={s.bagImg}
-                    resizeMode="contain"
-                  />
+                  {piece.colorways.map((c: any, i: number) => (
+                    <Image
+                      key={i}
+                      source={c.image}
+                      style={[s.bagImg, i !== cwIdx && s.hidden]}
+                      resizeMode="contain"
+                    />
+                  ))}
                   <Text style={[s.bagNumber, { color: piece.accent }]}>
                     {piece.number}
                   </Text>
@@ -753,6 +756,7 @@ const s = StyleSheet.create({
     borderBottomColor: T.border,
   },
   bagImg: { width: 260, height: 200 },
+  hidden: { position: "absolute", opacity: 0, width: 260, height: 200 },
   bagNumber: {
     fontSize: 8,
     letterSpacing: 3,
