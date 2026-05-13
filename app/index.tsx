@@ -2,7 +2,6 @@
 
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-// Video: set VIDEO_URL below when ready to add hero video
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -19,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { C } from "../lib/theme";
 
+// ── Layout hook ───────────────────────────────────────────────
 const useClientLayout = () => {
   const [layout, setLayout] = useState({
     w: 375,
@@ -28,7 +28,6 @@ const useClientLayout = () => {
     isWeb: false,
     isWebWide: false,
   });
-
   useEffect(() => {
     const update = () => {
       const dims = Dimensions.get("window");
@@ -46,147 +45,145 @@ const useClientLayout = () => {
     const sub = Dimensions.addEventListener("change", update);
     return () => sub?.remove();
   }, []);
-
   return layout;
 };
 
+// ── Data ──────────────────────────────────────────────────────
 interface BagItem {
   src: any;
   name: string;
   color: string;
 }
-// Bag images loaded from IPFS/remote — no local assets needed
+
 const BAGS: BagItem[] = [
   {
     src: require("../assets/bags/bag1.png"),
-    name: "Prototype - Haven",
+    name: "The Haven",
     color: "White · Gold",
   },
   {
     src: require("../assets/bags/bag2.png"),
-    name: "Prototype - Haven",
+    name: "The Haven",
     color: "Black · Gold",
   },
   {
     src: require("../assets/bags/bag3.png"),
-    name: "Prototype - The Bride",
+    name: "The Bride",
     color: "Brown · Black",
   },
   {
     src: require("../assets/bags/bag4.png"),
-    name: "Prototype - The Bride",
+    name: "The Bride",
     color: "Yellow · Red",
   },
   {
     src: require("../assets/bags/bag5.png"),
-    name: "Prototype - The Bride",
+    name: "The Bride",
     color: "Red · Black",
   },
   {
     src: require("../assets/bags/bag6.png"),
-    name: "Prototype - The Bride",
+    name: "The Bride",
     color: "Yellow · Black",
   },
 ];
 
 const MARQUEE = [
-  "NFC Authentication",
-  "On-Chain Provenance",
-  "Stellar Blockchain",
   "Handcrafted Luxury",
-  "Buy With Card",
-  "No Wallet Needed",
+  "Baltimore",
+  "Each Piece Certified",
   "Michael By Christian",
-  "Phygital Fashion",
+  "Limited Edition",
+  "Phygital",
+  "Made Once",
+  "Remembered Forever",
 ];
 
 const CONCEPT_POINTS = [
   {
     num: "01",
-    title: "NFC Tap Authentication",
-    body: "Every bag carries an embedded NFC card. Scan it to instantly verify your piece is genuine and linked to your Serial Number and Authentication Contract (NFT) on-chain.",
+    title: "Made by hand",
+    body: "Every silhouette is designed and assembled with the kind of attention that mass production doesn't allow. The details are the point.",
   },
   {
     num: "02",
-    title: "On-Chain Provenance",
-    body: "Design year, leather type, stitching, archive status — all recorded permanently on Stellar blockchain. Immutable. Forever yours.",
+    title: "Certified at birth",
+    body: "Each piece carries a certificate — permanent, tamper-proof, attached to the bag itself. Tap the M to see it.",
   },
   {
     num: "03",
-    title: "Blockchain Made Easy",
-    body: "Credit Card, Apple Pay, or Google Pay. No crypto wallet needed — we create one for you and deliver your Authentication Contract (NFT) in seconds.",
+    title: "Yours, provably",
+    body: "Ownership is recorded and transferable. The bag's full history travels with it — not in a box, not on paper. In the object.",
   },
   {
     num: "04",
-    title: "Community",
-    body: "Building an exclusive circle of owners, one authenticated transaction at a time. Every NFC tap and on-chain mint strengthens the collective.",
+    title: "A smaller circle",
+    body: "MBC doesn't scale. The editions are small by design. The people who find it early tend to stay.",
   },
 ];
 
 const STATS = [
-  { num: "10+", lbl: "In-House Designed Perfume Formulas" },
-  { num: "15+", lbl: "Unique Handbag Silhouettes" },
-  { num: "50+", lbl: "Unique Variations Produced" },
-  { num: "2022–2026", lbl: "Founding Year — Phygital Integration Year" },
+  { num: "10+", lbl: "Original Fragrance Formulas" },
+  { num: "4", lbl: "Bag Silhouettes" },
+  { num: "15+", lbl: "Colorways" },
+  { num: "2022", lbl: "Founded" },
 ];
 
 const PHYGITAL_CARDS = [
   {
     num: "01",
-    title: "Your bag lives forever",
+    title: "It remembers everything",
     accent: C.goldLt,
-    body: "Most luxury pieces disappear into time — stolen, sold, forgotten. When your MBC piece is minted on Stellar, its entire story lives on a public blockchain. Immutable. Permanent. Provably yours.",
+    body: "The leather. The year. The hands that made it. Every detail recorded at the moment of creation — not in a ledger somewhere, in the bag itself.",
   },
   {
     num: "02",
-    title: "Authenticity you can touch",
+    title: "Tap to verify",
     accent: C.gold,
-    body: "Tap your phone to the MBC 'M' embedded in every bag and it instantly pulls up the on-chain record. No certificates. No third parties. No guessing. The blockchain is the receipt.",
+    body: "The M on every bag isn't decoration. Press your phone to it. The record appears. Origin, ownership, authenticity. Nothing to interpret.",
   },
   {
     num: "03",
-    title: "Fashion as an asset",
+    title: "Provenance that travels",
     accent: C.gold,
-    body: "Traditional luxury is illiquid. Phygital is different — your ownership is transferable on-chain, your piece's history is transparent, and its provenance is verifiable by anyone, anywhere, forever.",
+    body: "When a piece changes hands, its history follows. Not in paperwork — in the object. Intact. Verifiable. Without anyone's permission.",
   },
   {
     num: "04",
-    title: "The next era of collecting",
+    title: "The quiet ones move first",
     accent: C.gold,
-    body: "The world's most forward-thinking collectors are already moving here. MBC is not just a bag — it's a position in a new category of luxury that merges craft, culture, and cryptographic proof.",
-  },
-  {
-    num: "05",
-    title: "The next era of investing",
-    accent: C.green,
-    body: "Purchasing MBC phygital is entry into a groundbreaking asset class: the NFT Authentication Contract infuses your physical bag with on-chain intrinsic value — verifiable provenance, unbreakable authenticity, and seamless transferability.",
+    body: "The collectors who understand what's happening here aren't loud about it. They acquire quietly. MBC is for them.",
   },
 ];
 
 const STEPS = [
   {
     num: "A",
-    badge: "Easiest",
-    title: "Pay with Card, Apple Pay, or Google Pay",
-    body: "Enter your email and payment details via secure Stripe checkout. No crypto required — we handle everything.",
+    badge: null,
+    title: "Request your piece",
+    body: "Tell us which silhouette and colorway you want. We confirm availability and reach out within 24 hours.",
   },
   {
     num: "B",
-    title: "We Create Your Stellar Wallet Automatically",
-    body: "If you don't have a wallet, we set one up for you instantly. You'll own it forever for NFTs, tokens, and the full Stellar ecosystem.",
+    badge: null,
+    title: "We confirm and invoice",
+    body: "Payment by card — simple, secure. No crypto required. Your certificate is created at this moment.",
   },
   {
     num: "C",
-    title: "NFT Transfers to Your Wallet",
-    body: "Once payment clears, your Authentication Contract (NFT) transfers directly to your wallet in seconds. Wallet details sent by email.",
+    badge: null,
+    title: "The certificate is yours",
+    body: "A permanent record attaches to your piece. It travels with the bag, not with the paperwork.",
   },
   {
     num: "D",
-    title: "Claim & Ship Your Physical Bag",
-    body: "Reply to your confirmation email with your shipping address — we verify ownership on-chain and dispatch your bag.",
+    badge: null,
+    title: "It arrives",
+    body: "Packaged and shipped. The M on the bag is yours to tap.",
   },
 ];
 
+// ── Marquee ───────────────────────────────────────────────────
 function MarqueeTicker() {
   const translateX = useRef(new Animated.Value(0)).current;
   const [rowWidth, setRowWidth] = useState(0);
@@ -246,7 +243,7 @@ const ts = StyleSheet.create({
   },
 });
 
-// ── HeroVideo — web uses HTML5 <video>, native uses expo-video ──
+// ── Hero video ────────────────────────────────────────────────
 function HeroVideo({ style }: { style: any }) {
   if (Platform.OS === "web") {
     return (
@@ -266,9 +263,7 @@ function HeroVideo({ style }: { style: any }) {
           el.setAttribute("muted", "");
           el.setAttribute("playsinline", "");
           el.setAttribute("webkit-playsinline", "");
-          // Try immediately
           el.play().catch(() => {});
-          // iOS Safari: must call play() synchronously inside touch handler
           const unlock = () => {
             el.play().catch(() => {});
             ["touchstart", "touchend", "click"].forEach((e) =>
@@ -317,17 +312,15 @@ function NativeVideo({ style }: { style: any }) {
   );
 }
 
+// ── Home screen ───────────────────────────────────────────────
 export default function HomeScreen() {
   const layout = useClientLayout();
-  const { w, h, isPhone, isTablet, isWeb, isWebWide } = layout;
+  const { w, h, isPhone, isTablet, isWeb } = layout;
   const [menuOpen, setMenuOpen] = useState(false);
   const { session } = useAuth();
 
-  // Video handled per-platform in render
-
   const fade = useRef(new Animated.Value(0)).current;
   const slideY = useRef(new Animated.Value(24)).current;
-  // Video hosted remotely — swap in your CDN/IPFS URL here
 
   useEffect(() => {
     Animated.parallel([
@@ -351,18 +344,15 @@ export default function HomeScreen() {
   const heroTitleSize = isPhone ? 40 : isTablet ? 48 : 58;
   const h2Size = isPhone ? 28 : 36;
   const maxW = isWeb ? 760 : undefined;
+  const COLS = isPhone ? 2 : 3;
 
-  // ── NAV_LINKS — main branch ──────────────────────────────────
   const NAV_LINKS = [
     { label: "Fragrances", path: "/fragrance", gold: true },
-    { label: "The Atelier", path: "/atelier", gold: true },
-    { label: "Rarity", path: "/rarity" },
+    { label: "Rarity", path: "/rarity", gold: false },
     session
-      ? { label: "My Profile", path: "/profile" }
-      : { label: "Sign In", path: "/auth" },
+      ? { label: "My Profile", path: "/profile", gold: false }
+      : { label: "Sign In", path: "/auth", gold: false },
   ];
-
-  const COLS = isPhone ? 2 : 3;
 
   return (
     <View style={s.root}>
@@ -373,18 +363,20 @@ export default function HomeScreen() {
             style={[
               s.navInner,
               maxW
-                ? { maxWidth: maxW, alignSelf: "center", width: "100%" }
+                ? {
+                    maxWidth: maxW,
+                    alignSelf: "center" as const,
+                    width: "100%",
+                  }
                 : {},
             ]}
           >
             <View>
-              <Text style={s.navEye}>Collection 2026</Text>
+              <Text style={s.navEye}>Est. 2022 · Baltimore</Text>
               <Text style={s.navLogo}>
                 Michael <Text style={s.navLogoEm}>By Christian</Text>
               </Text>
             </View>
-
-            {/* Desktop — inline links */}
             {!isPhone && (
               <View style={s.navLinks}>
                 {NAV_LINKS.map((l) => (
@@ -399,8 +391,6 @@ export default function HomeScreen() {
                 ))}
               </View>
             )}
-
-            {/* Phone — hamburger */}
             {isPhone && (
               <TouchableOpacity
                 onPress={() => setMenuOpen(!menuOpen)}
@@ -414,8 +404,6 @@ export default function HomeScreen() {
             )}
           </View>
         </View>
-
-        {/* Mobile dropdown */}
         {isPhone && menuOpen && (
           <View style={s.mobileMenu}>
             {NAV_LINKS.map((l) => (
@@ -465,7 +453,7 @@ export default function HomeScreen() {
                     isPhone && { fontSize: 8, letterSpacing: 2 },
                   ]}
                 >
-                  Phygital · Luxury Fashion · Stellar · Est. 2026
+                  Luxury Fashion · Est. 2022 · Baltimore
                 </Text>
                 <Text
                   style={[
@@ -495,8 +483,7 @@ export default function HomeScreen() {
                     isPhone && { fontSize: 13, maxWidth: "100%" },
                   ]}
                 >
-                  Where artisan craft meets immutable provenance.{"\n"}Every
-                  stitch signed on-chain.
+                  {"Made once.\nRemembered forever."}
                 </Text>
                 <View style={[s.ctaRow, isPhone && { marginTop: 20 }]}>
                   <TouchableOpacity
@@ -504,11 +491,11 @@ export default function HomeScreen() {
                       s.btnWhite,
                       isPhone && { paddingHorizontal: 20, paddingVertical: 12 },
                     ]}
-                    onPress={() => {}}
+                    onPress={() => router.push("/atelier" as any)}
                     activeOpacity={0.85}
                   >
                     <Text style={[s.btnWhiteTxt, isPhone && { fontSize: 9 }]}>
-                      Browse & Buy
+                      Request a Piece
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -516,25 +503,13 @@ export default function HomeScreen() {
                       s.btnGhost,
                       isPhone && { paddingHorizontal: 20, paddingVertical: 12 },
                     ]}
-                    onPress={() => router.push("/profile")}
+                    onPress={() => router.push("/profile" as any)}
                     activeOpacity={0.85}
                   >
                     <Text style={[s.btnGhostTxt, isPhone && { fontSize: 9 }]}>
-                      My Pieces
+                      My Profile
                     </Text>
                   </TouchableOpacity>
-                </View>
-                <View style={[s.chips, isPhone && { marginTop: 12 }]}>
-                  {[
-                    "💳 Card",
-                    "🍎 Apple Pay",
-                    "G Google Pay",
-                    "👜 No Wallet",
-                  ].map((p) => (
-                    <View key={p} style={s.chip}>
-                      <Text style={s.chipTxt}>{p}</Text>
-                    </View>
-                  ))}
                 </View>
               </View>
             </Animated.View>
@@ -544,24 +519,29 @@ export default function HomeScreen() {
         {/* ── TICKER ── */}
         <MarqueeTicker />
 
-        {/* ── CONCEPT ── */}
+        {/* ── THE HOUSE ── */}
         <View style={[s.section, { paddingHorizontal: sidePad }]}>
           <View
             style={
-              maxW ? { maxWidth: maxW, alignSelf: "center", width: "100%" } : {}
+              maxW
+                ? {
+                    maxWidth: maxW,
+                    alignSelf: "center" as const,
+                    width: "100%",
+                  }
+                : {}
             }
           >
-            <Text style={s.eyebrow}>The Concept</Text>
+            <Text style={s.eyebrow}>The House</Text>
             <Text
               style={[s.h2, { fontSize: h2Size, lineHeight: h2Size * 1.1 }]}
             >
-              Where craft meets{"\n"}
-              <Text style={s.h2Em}>the chain</Text>
+              {"Built different.\n"}
+              <Text style={s.h2Em}>By design.</Text>
             </Text>
             <Text style={s.bodyText}>
-              MBC is the first luxury fashion house where every physical bag is
-              paired with an NFT — a permanent, verifiable record of ownership
-              and heritage that no traditional house can offer.
+              MBC doesn't make pieces for everyone. It makes pieces that outlast
+              the moment they were bought — physically and on record.
             </Text>
             {CONCEPT_POINTS.map((p, i) => (
               <View key={p.num} style={[s.point, i === 0 && { marginTop: 8 }]}>
@@ -579,7 +559,13 @@ export default function HomeScreen() {
         <View style={[s.statsSection, { paddingHorizontal: sidePad }]}>
           <View
             style={
-              maxW ? { maxWidth: maxW, alignSelf: "center", width: "100%" } : {}
+              maxW
+                ? {
+                    maxWidth: maxW,
+                    alignSelf: "center" as const,
+                    width: "100%",
+                  }
+                : {}
             }
           >
             <Text style={s.eyebrow}>By The Numbers</Text>
@@ -602,13 +588,17 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* ── COLLECTION CTA ── */}
+        {/* ── COLLECTION ── */}
         <View style={s.collSection}>
           <View
             style={[
               { paddingHorizontal: sidePad, paddingTop: 52, paddingBottom: 24 },
               maxW
-                ? { maxWidth: maxW, alignSelf: "center", width: "100%" }
+                ? {
+                    maxWidth: maxW,
+                    alignSelf: "center" as const,
+                    width: "100%",
+                  }
                 : {},
             ]}
           >
@@ -619,15 +609,15 @@ export default function HomeScreen() {
               Current <Text style={s.h2Em}>Pieces</Text>
             </Text>
             <Text style={s.bodyText}>
-              Pay by card, Apple Pay, or Google Pay.{"\n"}No wallet needed — NFT
-              delivered instantly.
+              Each piece is made in limited quantity. Request yours — we'll be
+              in touch.
             </Text>
             <TouchableOpacity
               style={s.btnGold}
-              onPress={() => {}}
+              onPress={() => router.push("/atelier" as any)}
               activeOpacity={0.85}
             >
-              <Text style={s.btnGoldTxt}>Browse All Pieces & Buy →</Text>
+              <Text style={s.btnGoldTxt}>Request a Piece →</Text>
             </TouchableOpacity>
           </View>
           <View style={[s.bagGrid, { paddingHorizontal: 2 }]}>
@@ -636,7 +626,7 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   key={i}
                   style={s.bagCard}
-                  onPress={() => {}}
+                  onPress={() => router.push("/atelier" as any)}
                   activeOpacity={0.88}
                 >
                   <View style={s.bagImgWrap}>
@@ -666,7 +656,7 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   key={i}
                   style={s.bagCard}
-                  onPress={() => {}}
+                  onPress={() => router.push("/atelier" as any)}
                   activeOpacity={0.88}
                 >
                   <View style={s.bagImgWrap}>
@@ -694,24 +684,30 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* ── HOW PHYGITAL WORKS ── */}
+        {/* ── THE CERTIFICATE ── */}
         <View style={[s.section, s.sectionAlt, { paddingHorizontal: sidePad }]}>
           <View
             style={
-              maxW ? { maxWidth: maxW, alignSelf: "center", width: "100%" } : {}
+              maxW
+                ? {
+                    maxWidth: maxW,
+                    alignSelf: "center" as const,
+                    width: "100%",
+                  }
+                : {}
             }
           >
-            <Text style={s.eyebrow}>How Phygital Works</Text>
+            <Text style={s.eyebrow}>The Certificate</Text>
             <Text
               style={[s.h2, { fontSize: h2Size, lineHeight: h2Size * 1.1 }]}
             >
-              Engrave Yourself{"\n"}Into History,{" "}
-              <Text style={s.h2Em}>Digitally</Text>
+              {"The bag is\n"}
+              <Text style={s.h2Em}>the record.</Text>
             </Text>
             <Text style={s.phygitalLead}>
-              Phygital is not a gimmick. It's the convergence of two things that
-              have never properly existed together: the warmth of handcrafted
-              luxury and the permanence of the blockchain.
+              Every piece leaves the studio with a certificate attached — not in
+              a box, not on paper. In the object itself. Permanent. Quiet.
+              Impossible to fake.
             </Text>
             {PHYGITAL_CARDS.map((card, i) => (
               <View
@@ -732,33 +728,39 @@ export default function HomeScreen() {
             <View style={s.phQuote}>
               <Text style={s.phQuoteMark}>"</Text>
               <Text style={[s.phQuoteText, isPhone && { fontSize: 15 }]}>
-                The question is no longer whether luxury will go on-chain. It's
-                who gets there first with something worth owning.
+                The pieces that matter are the ones that know what they are.
               </Text>
               <Text style={s.phQuoteAttr}>— Michael By Christian</Text>
             </View>
             <TouchableOpacity
               style={s.btnGold}
-              onPress={() => {}}
+              onPress={() => router.push("/atelier" as any)}
               activeOpacity={0.85}
             >
-              <Text style={s.btnGoldTxt}>Own a Piece of This →</Text>
+              <Text style={s.btnGoldTxt}>Request a Piece →</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* ── HOW TO BUY ── */}
-        <View style={[s.section, s.sectionAlt, { paddingHorizontal: sidePad }]}>
+        {/* ── HOW IT WORKS ── */}
+        <View style={[s.section, { paddingHorizontal: sidePad }]}>
           <View
             style={
-              maxW ? { maxWidth: maxW, alignSelf: "center", width: "100%" } : {}
+              maxW
+                ? {
+                    maxWidth: maxW,
+                    alignSelf: "center" as const,
+                    width: "100%",
+                  }
+                : {}
             }
           >
-            <Text style={s.eyebrow}>How To Buy</Text>
+            <Text style={s.eyebrow}>How It Works</Text>
             <Text
               style={[s.h2, { fontSize: h2Size, lineHeight: h2Size * 1.1 }]}
             >
-              Own In A Few <Text style={s.h2Em}>Simple Steps</Text>
+              {"From request\n"}
+              <Text style={s.h2Em}>to yours.</Text>
             </Text>
             {STEPS.map((step, i) => (
               <View
@@ -782,13 +784,13 @@ export default function HomeScreen() {
               </View>
             ))}
             <View style={s.callout}>
-              <Text style={s.calloutTitle}>· Checkout the Collection ·</Text>
+              <Text style={s.calloutTitle}>· The Atelier ·</Text>
               <TouchableOpacity
                 style={s.btnBorder}
-                onPress={() => {}}
+                onPress={() => router.push("/atelier" as any)}
                 activeOpacity={0.85}
               >
-                <Text style={s.btnBorderTxt}>Browse & Buy →</Text>
+                <Text style={s.btnBorderTxt}>Request a Piece →</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -802,7 +804,7 @@ export default function HomeScreen() {
             </Text>
             <View style={s.footerRule} />
             <Text style={s.footerSub}>
-              Phygital Luxury Fashion · Stellar Blockchain · Est. 2026
+              Luxury Fashion · Est. 2022 · Baltimore
             </Text>
             <Text style={s.footerHandle}>@michaelbychristian · @cinccity</Text>
           </View>
@@ -812,6 +814,7 @@ export default function HomeScreen() {
   );
 }
 
+// ── Styles ────────────────────────────────────────────────────
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.black },
   navSafe: {
@@ -873,12 +876,7 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.cream,
   },
-  hero: {
-    width: "100%",
-    justifyContent: "flex-end",
-    overflow: "hidden",
-    backgroundColor: C.black,
-  },
+
   heroSection: { width: "100%", backgroundColor: C.black, overflow: "hidden" },
   heroFrame: {
     width: "100%",
@@ -906,8 +904,6 @@ const s = StyleSheet.create({
   },
   heroContent: { paddingBottom: 44, zIndex: 2 },
   heroVideo: { width: "100%", height: "100%" },
-  heroTextBlock: { maxWidth: 420 },
-  heroTextBlockWide: { marginLeft: 80 },
   heroInner: {},
   heroEye: {
     fontSize: 9,
@@ -965,20 +961,7 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.cream,
   },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 16 },
-  chip: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(245,239,224,0.14)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  chipTxt: {
-    fontSize: 7,
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
-    color: "rgba(245,239,224,0.48)",
-  },
+
   section: {
     borderTopWidth: 1,
     borderTopColor: C.border,
@@ -1006,6 +989,7 @@ const s = StyleSheet.create({
     lineHeight: 24,
     marginBottom: 24,
   },
+
   point: {
     flexDirection: "row",
     paddingTop: 20,
@@ -1031,6 +1015,7 @@ const s = StyleSheet.create({
     letterSpacing: 0.2,
   },
   pointBody: { fontSize: 13, color: "#A09880", lineHeight: 20 },
+
   statsSection: {
     borderTopWidth: 1,
     borderTopColor: C.border,
@@ -1063,6 +1048,7 @@ const s = StyleSheet.create({
     flex: 1,
     flexWrap: "wrap",
   },
+
   collSection: {
     borderTopWidth: 1,
     borderTopColor: C.border,
@@ -1112,6 +1098,7 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.muted,
   },
+
   phygitalLead: {
     fontSize: 15,
     color: "#A09880",
@@ -1175,6 +1162,7 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.muted,
   },
+
   step: {
     flexDirection: "row",
     paddingTop: 20,
@@ -1251,6 +1239,7 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: C.cream,
   },
+
   footer: {
     paddingVertical: 44,
     alignItems: "center",
