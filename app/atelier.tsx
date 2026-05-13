@@ -1,10 +1,9 @@
-// app/atelier.tsx — The Atelier: upcoming pieces preview page (main branch)
+// app/atelier.tsx — The Atelier: upcoming pieces (fragrance-page style feed)
 
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
-    Dimensions,
     Image,
     KeyboardAvoidingView,
     Platform,
@@ -13,47 +12,47 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 
 const IS_WEB = Platform.OS === "web";
-const { width: SCREEN_W } = Dimensions.get("window");
-const IS_WIDE = IS_WEB && SCREEN_W >= 768;
+const MAX_W = IS_WEB ? 760 : undefined;
 
-// ── Dark luxury theme ─────────────────────────────────────────
-const D = {
+const T = {
   bg: "#FFFFFF",
   bgAlt: "#F8F6F2",
   bgDeep: "#F2EFE9",
-  bgDark: "#0C0B09",
-  bgCard: "#F8F6F2",
   border: "#E8E4DC",
-  borderDark: "#D4CFC6",
   text: "#1A1814",
   textSub: "#6B6458",
   textMuted: "#9A9088",
   gold: "#B8963E",
-  goldLt: "#B8963E",
-  green: "#2D7A52",
   greenBg: "#EEF7F2",
   greenBorder: "#A8D4BC",
+  green: "#2D7A52",
   red: "#B84040",
 };
 
-// ── Piece data ────────────────────────────────────────────────
 const PIECES = [
   {
     id: "cordelia",
     name: "The Cordelia",
+    number: "No. 01",
     type: "Bucket Bag",
-    tag: "Hero Piece",
-    hero: true,
+    subtitle: "Hero Piece — Resort 2026",
     price: 585,
     drop: "Q3 2026",
     desc: "Our debut silhouette. A refined bucket bag with leather bow detail, chain-and-leather strap, and drawstring grommet closure. The Cordelia is for the woman who curates, not collects.",
+    details: [
+      "Leather bow detail",
+      "Chain + leather strap",
+      "Drawstring grommet closure",
+      "Phygital authenticated",
+    ],
+    accent: "#B8963E",
     colorways: [
       {
         name: "Rose Blush",
@@ -80,12 +79,19 @@ const PIECES = [
   {
     id: "venetia",
     name: "The Venetia",
+    number: "No. 02",
     type: "Structured Satchel",
-    tag: null,
-    hero: false,
+    subtitle: "Resort 2026",
     price: 695,
     drop: "Q3 2026",
     desc: "Patent leather with radiating seam architecture, dual buckle straps, and a T-bar turn-lock closure. Color-blocked construction — two leathers, one silhouette.",
+    details: [
+      "Patent leather body",
+      "Radiating seam detail",
+      "T-bar turn-lock closure",
+      "Color-blocked construction",
+    ],
+    accent: "#2C6B6B",
     colorways: [
       {
         name: "Teal + Cream Handles",
@@ -104,7 +110,7 @@ const PIECES = [
       },
       {
         name: "Teal + Burgundy Handles",
-        hex: "#4A6A7A",
+        hex: "#4A3A3A",
         image: require("../assets/renders/venetia-4.png"),
       },
     ],
@@ -112,16 +118,23 @@ const PIECES = [
   {
     id: "haven",
     name: "The Haven Bowler",
+    number: "No. 03",
     type: "Bowler Bag",
-    tag: null,
-    hero: false,
+    subtitle: "Resort 2026",
     price: 495,
     drop: "Q3 2026",
     desc: "Domed silhouette meets downtown energy. Soft-formed, quietly opulent. Gold nameplate hardware, zipper closure, and contrast leather paneling at the base.",
+    details: [
+      "Gold nameplate hardware",
+      "Contrast leather base",
+      "Zip closure",
+      "Pebbled leather body",
+    ],
+    accent: "#8C6F28",
     colorways: [
       {
         name: "Ivory + Tan",
-        hex: "#F5EFE0",
+        hex: "#F0E8D8",
         image: require("../assets/renders/haven-ivory.png"),
       },
       {
@@ -131,7 +144,7 @@ const PIECES = [
       },
       {
         name: "Blush + Sienna",
-        hex: "#E8C4C4",
+        hex: "#E8B4B4",
         image: require("../assets/renders/haven-pink.png"),
       },
       {
@@ -149,15 +162,22 @@ const PIECES = [
   {
     id: "sovereign",
     name: "The Sovereign",
+    number: "No. 04",
     type: "Top-Handle Tote",
-    tag: "Coming Soon",
-    hero: false,
+    subtitle: "Coming Soon — Q4 2026",
     price: 695,
     drop: "Q4 2026",
     desc: "Power dressing, distilled. Sharp lines, architectural form, chain hardware. The Sovereign is the statement piece in every MBC collection. Render dropping soon.",
+    details: [
+      "Top-handle + crossbody strap",
+      "Architectural structured form",
+      "Chain hardware",
+      "Phygital authenticated",
+    ],
+    accent: "#2C6B6B",
     colorways: [
       {
-        name: "Teal + Burgundy (Back)",
+        name: "Teal + Burgundy",
         hex: "#2C6B6B",
         image: require("../assets/renders/venetia-back.png"),
       },
@@ -169,10 +189,12 @@ const PIECES = [
 function NotifyForm({
   piece,
   colorway,
+  accent,
   onClose,
 }: {
   piece: string;
   colorway: string;
+  accent: string;
   onClose: () => void;
 }) {
   const { user } = useAuth();
@@ -212,14 +234,19 @@ function NotifyForm({
 
   if (submitted) {
     return (
-      <View style={f.box}>
-        <Text style={f.successIcon}>✦</Text>
-        <Text style={f.successTitle}>You're on the list</Text>
-        <Text style={f.successSub}>
+      <View
+        style={[
+          n.box,
+          { borderColor: T.greenBorder, backgroundColor: T.greenBg },
+        ]}
+      >
+        <Text style={[n.icon, { color: T.green }]}>✦</Text>
+        <Text style={n.successTitle}>You're on the list</Text>
+        <Text style={n.successSub}>
           We'll notify you at {email} when {piece} drops.
         </Text>
-        <TouchableOpacity style={f.closeBtn} onPress={onClose}>
-          <Text style={f.closeBtnTxt}>Close</Text>
+        <TouchableOpacity style={n.closeBtn} onPress={onClose}>
+          <Text style={n.closeTxt}>Close</Text>
         </TouchableOpacity>
       </View>
     );
@@ -229,49 +256,47 @@ function NotifyForm({
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <View style={f.box}>
-        <Text style={f.formTitle}>Notify Me — {piece}</Text>
-        <Text style={f.formSub}>
-          {colorway} · We'll email you when this drops.
-        </Text>
-
-        <Text style={f.label}>Full Name</Text>
+      <View style={n.box}>
+        <Text style={n.title}>{piece} · Notify Me</Text>
+        <Text style={n.sub}>{colorway} · We'll email you when this drops.</Text>
+        <Text style={n.label}>Full Name</Text>
         <TextInput
-          style={f.input}
+          style={n.input}
           value={name}
           onChangeText={setName}
           placeholder="Your name"
-          placeholderTextColor={D.textMuted}
+          placeholderTextColor={T.textMuted}
           autoCapitalize="words"
         />
-
-        <Text style={f.label}>Email</Text>
+        <Text style={n.label}>Email</Text>
         <TextInput
-          style={f.input}
+          style={n.input}
           value={email}
           onChangeText={setEmail}
           placeholder="your@email.com"
-          placeholderTextColor={D.textMuted}
+          placeholderTextColor={T.textMuted}
           keyboardType="email-address"
           autoCapitalize="none"
         />
-
-        {!!error && <Text style={f.errorTxt}>{error}</Text>}
-
+        {!!error && <Text style={n.errorTxt}>{error}</Text>}
         <TouchableOpacity
-          style={[f.submitBtn, submitting && { opacity: 0.6 }]}
+          style={[
+            n.submitBtn,
+            { backgroundColor: accent },
+            submitting && { opacity: 0.6 },
+          ]}
           onPress={submit}
           disabled={submitting}
           activeOpacity={0.85}
         >
           {submitting ? (
-            <ActivityIndicator color={D.bg} size="small" />
+            <ActivityIndicator color="#fff" size="small" />
           ) : (
-            <Text style={f.submitTxt}>Notify Me →</Text>
+            <Text style={n.submitTxt}>Send Notification Request →</Text>
           )}
         </TouchableOpacity>
-        <TouchableOpacity style={f.cancelBtn} onPress={onClose}>
-          <Text style={f.cancelTxt}>Cancel</Text>
+        <TouchableOpacity onPress={onClose} style={n.cancelWrap}>
+          <Text style={n.cancelTxt}>Cancel</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -283,43 +308,28 @@ export default function AtelierScreen() {
   const { user, session } = useAuth();
   const [selectedColorways, setSelectedColorways] = useState<
     Record<string, number>
-  >({
-    cordelia: 0,
-    venetia: 0,
-    haven: 0,
-    sovereign: 0,
-  });
+  >({});
   const [likes, setLikes] = useState<Record<string, boolean>>({});
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
   const [notifyForm, setNotifyForm] = useState<{
-    piece: string;
-    colorway: string;
+    piece: any;
+    colorwayIdx: number;
   } | null>(null);
 
   useEffect(() => {
     loadLikes();
-  }, []);
+  }, [user]);
 
   async function loadLikes() {
     try {
-      const { data } = await supabase
-        .from("atelier_likes")
-        .select("piece_id, count");
-      if (data) {
-        const counts: Record<string, number> = {};
-        data.forEach((r: any) => {
-          counts[r.piece_id] = r.count;
-        });
-        setLikeCounts(counts);
-      }
       if (user) {
-        const { data: userLikes } = await supabase
+        const { data } = await supabase
           .from("atelier_user_likes")
           .select("piece_id")
           .eq("user_id", user.id);
-        if (userLikes) {
+        if (data) {
           const liked: Record<string, boolean> = {};
-          userLikes.forEach((r: any) => {
+          data.forEach((r: any) => {
             liked[r.piece_id] = true;
           });
           setLikes(liked);
@@ -356,17 +366,29 @@ export default function AtelierScreen() {
     }
   }
 
-  function selectColorway(pieceId: string, idx: number) {
-    setSelectedColorways((prev) => ({ ...prev, [pieceId]: idx }));
-  }
-
-  const heroPiece = PIECES[0];
-  const otherPieces = PIECES.slice(1);
-
   return (
     <View style={s.root}>
+      {/* Notify overlay */}
+      {notifyForm && (
+        <View style={s.overlay}>
+          <NotifyForm
+            piece={notifyForm.piece.name}
+            colorway={notifyForm.piece.colorways[notifyForm.colorwayIdx].name}
+            accent={notifyForm.piece.accent}
+            onClose={() => setNotifyForm(null)}
+          />
+        </View>
+      )}
+
       <SafeAreaView edges={["top"]} style={s.topBar}>
-        <View style={s.topBarInner}>
+        <View
+          style={[
+            s.topBarInner,
+            MAX_W
+              ? { maxWidth: MAX_W, alignSelf: "center" as const, width: "100%" }
+              : {},
+          ]}
+        >
           <TouchableOpacity
             onPress={() =>
               router.canGoBack() ? router.back() : router.replace("/" as any)
@@ -382,246 +404,236 @@ export default function AtelierScreen() {
         </View>
       </SafeAreaView>
 
-      {notifyForm && (
-        <View style={s.overlay}>
-          <NotifyForm
-            piece={notifyForm.piece}
-            colorway={notifyForm.colorway}
-            onClose={() => setNotifyForm(null)}
-          />
-        </View>
-      )}
-
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* ── Page header ── */}
-        <View style={s.pageHeader}>
-          <Text style={s.pageEye}>Upcoming Pieces — Preview Collection</Text>
-          <Text style={s.pageTitle}>
-            The <Text style={s.pageTitleEm}>Atelier</Text>
-          </Text>
-          <View style={s.seasonTag}>
-            <Text style={s.seasonTagTxt}>✦ Resort 2026 Preview ✦</Text>
+        <View
+          style={[
+            s.content,
+            MAX_W
+              ? { maxWidth: MAX_W, alignSelf: "center" as const, width: "100%" }
+              : {},
+          ]}
+        >
+          {/* Header */}
+          <View style={s.hero}>
+            <Text style={s.heroEye}>Upcoming Pieces · Preview Collection</Text>
+            <Text style={s.heroTitle}>
+              The{"\n"}
+              <Text style={s.heroTitleEm}>Atelier</Text>
+            </Text>
+            <Text style={s.heroSub}>
+              Four silhouettes. Fifteen colorways. Each phygital authenticated.
+              {"\n"}
+              Designed in Baltimore — dropping 2026.
+            </Text>
           </View>
-        </View>
 
-        {/* ── Stats ── */}
-        <View style={s.statsRow}>
-          {[
-            { val: "4", lbl: "Silhouettes" },
-            { val: "15", lbl: "Colorways" },
-            { val: "2026", lbl: "Est. Drop" },
-          ].map(({ val, lbl }) => (
-            <View key={lbl} style={s.statCell}>
-              <Text style={s.statVal}>{val}</Text>
-              <Text style={s.statLbl}>{lbl}</Text>
+          <View style={s.rule} />
+
+          {/* Piece feed — mirrors fragrance card layout */}
+          {PIECES.map((piece) => {
+            const cwIdx = selectedColorways[piece.id] || 0;
+            const cw = piece.colorways[cwIdx];
+            const isLiked = likes[piece.id];
+            const likeCount = likeCounts[piece.id] || 0;
+
+            return (
+              <View key={piece.id} style={s.card}>
+                {/* Dark image panel — like fragrance bottle wrap */}
+                <View style={s.imageWrap}>
+                  <Image
+                    source={cw.image}
+                    style={s.bagImg}
+                    resizeMode="contain"
+                  />
+                  <Text style={[s.bagNumber, { color: piece.accent }]}>
+                    {piece.number}
+                  </Text>
+                </View>
+
+                {/* Card info — mirrors fragrance cardInfo */}
+                <View style={s.cardInfo}>
+                  <View style={s.cardHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.cardName}>{piece.name}</Text>
+                      <Text style={s.cardType}>{piece.type}</Text>
+                    </View>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={[s.cardPrice, { color: piece.accent }]}>
+                        ${piece.price.toLocaleString()}
+                      </Text>
+                      <Text style={s.cardPriceSub}>Est. Retail</Text>
+                    </View>
+                  </View>
+
+                  <Text style={[s.cardSubtitle, { color: piece.accent }]}>
+                    {piece.subtitle}
+                  </Text>
+                  <Text style={s.cardDesc} numberOfLines={3}>
+                    {piece.desc}
+                  </Text>
+
+                  {/* Details rows — like fragrance notes box */}
+                  <View style={s.detailsBox}>
+                    {piece.details.map((d, i) => (
+                      <View
+                        key={i}
+                        style={[
+                          s.detailRow,
+                          i < piece.details.length - 1 && s.detailBorder,
+                        ]}
+                      >
+                        <Text style={[s.detailDot, { color: piece.accent }]}>
+                          ✦
+                        </Text>
+                        <Text style={s.detailVal}>{d}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* Colorway selector */}
+                  <View style={s.colorwaySection}>
+                    <View style={s.colorwayRow}>
+                      <Text style={s.colorwayLbl}>Colorways</Text>
+                      <View style={s.dots}>
+                        {piece.colorways.map((c, i) => (
+                          <TouchableOpacity
+                            key={i}
+                            style={[
+                              s.dot,
+                              { backgroundColor: c.hex },
+                              cwIdx === i && {
+                                borderColor: piece.accent,
+                                transform: [{ scale: 1.2 }],
+                              },
+                            ]}
+                            onPress={() =>
+                              setSelectedColorways((prev) => ({
+                                ...prev,
+                                [piece.id]: i,
+                              }))
+                            }
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                    <Text style={s.colorwayName}>{cw.name}</Text>
+                  </View>
+
+                  {/* Footer — notify + like + drop */}
+                  <View style={s.cardFoot}>
+                    <TouchableOpacity
+                      style={[
+                        s.notifyTag,
+                        {
+                          borderColor: piece.accent,
+                          backgroundColor: piece.accent + "0D",
+                        },
+                      ]}
+                      onPress={() =>
+                        setNotifyForm({ piece, colorwayIdx: cwIdx })
+                      }
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[s.notifyTagTxt, { color: piece.accent }]}>
+                        Notify Me →
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        s.likeBtn,
+                        isLiked && { borderColor: piece.accent },
+                      ]}
+                      onPress={() => toggleLike(piece.id)}
+                      activeOpacity={0.85}
+                    >
+                      <Text
+                        style={[s.likeIcon, isLiked && { color: piece.accent }]}
+                      >
+                        {isLiked ? "♥" : "♡"}
+                      </Text>
+                      {likeCount > 0 && (
+                        <Text
+                          style={[
+                            s.likeCount,
+                            isLiked && { color: piece.accent },
+                          ]}
+                        >
+                          {likeCount}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+
+                    <Text style={s.dropDate}>Est. Drop — {piece.drop}</Text>
+                  </View>
+                </View>
+              </View>
+            );
+          })}
+
+          {/* Footer strip — like fragrance NFC strip */}
+          <View style={s.footerStrip}>
+            <View style={s.footerDot} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.footerTitle}>
+                ✦ Each Piece Phygital Authenticated
+              </Text>
+              <Text style={s.footerSub}>
+                Every MBC bag arrives with an on-chain Authentication Contract
+                on the Stellar blockchain — permanent provenance, verifiable
+                ownership, forever.
+              </Text>
             </View>
-          ))}
+          </View>
+
+          <View style={{ height: 60 }} />
         </View>
-
-        <View style={s.rule} />
-
-        {/* ── Hero piece ── */}
-        <PieceCard
-          piece={heroPiece}
-          selectedColorway={selectedColorways[heroPiece.id]}
-          isLiked={likes[heroPiece.id]}
-          likeCount={likeCounts[heroPiece.id] || 0}
-          onSelectColorway={(i) => selectColorway(heroPiece.id, i)}
-          onLike={() => toggleLike(heroPiece.id)}
-          onNotify={(colorway) =>
-            setNotifyForm({ piece: heroPiece.name, colorway })
-          }
-          hero
-        />
-
-        <View style={s.rule} />
-
-        {/* ── Other pieces grid ── */}
-        <View style={IS_WIDE ? s.gridWide : s.gridMobile}>
-          {otherPieces.map((piece) => (
-            <PieceCard
-              key={piece.id}
-              piece={piece}
-              selectedColorway={selectedColorways[piece.id]}
-              isLiked={likes[piece.id]}
-              likeCount={likeCounts[piece.id] || 0}
-              onSelectColorway={(i) => selectColorway(piece.id, i)}
-              onLike={() => toggleLike(piece.id)}
-              onNotify={(colorway) =>
-                setNotifyForm({ piece: piece.name, colorway })
-              }
-              hero={false}
-            />
-          ))}
-        </View>
-
-        {/* ── Quote footer ── */}
-        <View style={s.quoteSection}>
-          <Text style={s.quoteMark}>"</Text>
-          <Text style={s.quoteText}>
-            Each piece arrives with a phygital certificate of authenticity — a
-            living record on-chain that travels with the bag, forever.
-          </Text>
-          <Text style={s.quoteAttr}>— Michael By Christian</Text>
-        </View>
-
-        <View style={{ height: 60 }} />
       </ScrollView>
     </View>
   );
 }
 
-// ── Piece card component ──────────────────────────────────────
-function PieceCard({
-  piece,
-  selectedColorway,
-  isLiked,
-  likeCount,
-  onSelectColorway,
-  onLike,
-  onNotify,
-  hero,
-}: {
-  piece: any;
-  selectedColorway: number;
-  isLiked: boolean;
-  likeCount: number;
-  onSelectColorway: (i: number) => void;
-  onLike: () => void;
-  onNotify: (colorway: string) => void;
-  hero: boolean;
-}) {
-  const cw = piece.colorways[selectedColorway];
-
-  return (
-    <View style={[s.card, hero && s.heroCard]}>
-      {/* Image */}
-      <View style={[s.imgWrap, hero && s.heroImgWrap]}>
-        <Image source={cw.image} style={s.img} resizeMode="contain" />
-        {piece.tag && (
-          <View style={s.tagBadge}>
-            <Text style={s.tagBadgeTxt}>{piece.tag}</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Content */}
-      <View style={s.cardContent}>
-        <View style={s.cardTitleRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.cardName}>{piece.name}</Text>
-            <Text style={s.cardType}>{piece.type}</Text>
-          </View>
-          <Text style={s.cardPrice}>
-            ${piece.price.toLocaleString()}
-            {"\n"}
-            <Text style={s.cardPriceSub}>Est. Retail</Text>
-          </Text>
-        </View>
-
-        <Text style={s.cardDesc}>{piece.desc}</Text>
-
-        {/* Colorways */}
-        <View style={s.colorwayRow}>
-          <Text style={s.colorwayLbl}>Colorways</Text>
-          <View style={s.dots}>
-            {piece.colorways.map((c: any, i: number) => (
-              <TouchableOpacity
-                key={i}
-                style={[
-                  s.dot,
-                  { backgroundColor: c.hex },
-                  selectedColorway === i && s.dotActive,
-                ]}
-                onPress={() => onSelectColorway(i)}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-              />
-            ))}
-          </View>
-        </View>
-        <Text style={s.colorwayName}>{cw.name}</Text>
-
-        {/* Actions */}
-        <View style={s.actionsRow}>
-          <TouchableOpacity
-            style={s.notifyBtn}
-            onPress={() => onNotify(cw.name)}
-            activeOpacity={0.85}
-          >
-            <Text style={s.notifyBtnTxt}>Notify Me</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[s.likeBtn, isLiked && s.likeBtnActive]}
-            onPress={onLike}
-            activeOpacity={0.85}
-          >
-            <Text style={[s.likeIcon, isLiked && { color: D.gold }]}>
-              {isLiked ? "♥" : "♡"}
-            </Text>
-            {likeCount > 0 && (
-              <Text style={[s.likeCount, isLiked && { color: D.gold }]}>
-                {likeCount}
-              </Text>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        <Text style={s.dropDate}>Est. Drop — {piece.drop}</Text>
-      </View>
-    </View>
-  );
-}
-
 // ── Notify form styles ────────────────────────────────────────
-const f = StyleSheet.create({
+const n = StyleSheet.create({
   box: {
-    backgroundColor: D.bg,
+    backgroundColor: T.bg,
     borderWidth: 1,
-    borderColor: D.border,
+    borderColor: T.border,
     padding: 28,
     margin: 24,
     maxWidth: 420,
     width: "100%",
     alignSelf: "center",
   },
-  formTitle: {
+  icon: { fontSize: 24, textAlign: "center", marginBottom: 10 },
+  title: {
     fontFamily: "serif",
     fontSize: 18,
     fontWeight: "700",
-    color: D.text,
+    color: T.text,
     marginBottom: 4,
   },
-  formSub: {
-    fontSize: 11,
-    color: D.textSub,
-    marginBottom: 20,
-    letterSpacing: 0.3,
-  },
+  sub: { fontSize: 11, color: T.textSub, marginBottom: 20 },
   label: {
     fontSize: 9,
     letterSpacing: 1.5,
     textTransform: "uppercase",
-    color: D.textSub,
+    color: T.textSub,
     marginBottom: 6,
   },
   input: {
     borderWidth: 1,
-    borderColor: D.border,
-    backgroundColor: D.bgAlt,
-    color: D.text,
+    borderColor: T.border,
+    backgroundColor: T.bgAlt,
+    color: T.text,
     fontSize: 13,
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 14,
   },
-  errorTxt: { fontSize: 11, color: D.red, marginBottom: 10 },
-  submitBtn: {
-    backgroundColor: D.gold,
-    padding: 14,
-    alignItems: "center",
-    marginBottom: 10,
-  },
+  errorTxt: { fontSize: 11, color: T.red, marginBottom: 10 },
+  submitBtn: { padding: 14, alignItems: "center", marginBottom: 10 },
   submitTxt: {
     fontSize: 10,
     fontWeight: "700",
@@ -629,50 +641,56 @@ const f = StyleSheet.create({
     textTransform: "uppercase",
     color: "#FFFFFF",
   },
-  cancelBtn: { alignItems: "center", paddingVertical: 8 },
-  cancelTxt: { fontSize: 10, color: D.textMuted, letterSpacing: 1 },
-  successIcon: {
-    fontSize: 24,
-    color: D.green,
-    textAlign: "center",
-    marginBottom: 10,
-  },
+  cancelWrap: { alignItems: "center", paddingVertical: 8 },
+  cancelTxt: { fontSize: 10, color: T.textMuted },
   successTitle: {
     fontFamily: "serif",
     fontSize: 18,
     fontWeight: "700",
-    color: D.text,
+    color: T.text,
     textAlign: "center",
     marginBottom: 6,
   },
   successSub: {
     fontSize: 12,
-    color: D.textSub,
+    color: T.textSub,
     textAlign: "center",
     lineHeight: 20,
     marginBottom: 20,
   },
   closeBtn: {
     borderWidth: 1,
-    borderColor: D.border,
+    borderColor: T.greenBorder,
     padding: 12,
     alignItems: "center",
   },
-  closeBtnTxt: {
+  closeTxt: {
     fontSize: 10,
     letterSpacing: 2,
     textTransform: "uppercase",
-    color: D.textSub,
+    color: T.green,
   },
 });
 
 // ── Main styles ───────────────────────────────────────────────
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: D.bg },
+  root: { flex: 1, backgroundColor: T.bg },
+  overlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    zIndex: 100,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   topBar: {
-    backgroundColor: D.bg,
+    backgroundColor: T.bg,
     borderBottomWidth: 1,
-    borderBottomColor: D.border,
+    borderBottomColor: T.border,
   },
   topBarInner: {
     flexDirection: "row",
@@ -681,178 +699,136 @@ const s = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
-  backTxt: { fontSize: 11, color: D.textSub },
+  backTxt: { fontSize: 11, color: T.textSub },
   topLogo: {
     fontFamily: "serif",
     fontSize: 15,
     fontWeight: "700",
-    color: D.text,
+    color: T.text,
   },
-  topLogoEm: { fontStyle: "italic", fontWeight: "400", color: D.gold },
+  topLogoEm: { fontStyle: "italic", fontWeight: "400", color: T.gold },
 
-  overlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    zIndex: 100,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  content: { paddingHorizontal: 20 },
 
-  pageHeader: {
-    alignItems: "center",
-    paddingTop: 40,
-    paddingBottom: 28,
-    paddingHorizontal: 24,
-    backgroundColor: D.bg,
-  },
-  pageEye: {
+  hero: { paddingTop: 28, paddingBottom: 20 },
+  heroEye: {
     fontSize: 8,
-    letterSpacing: 3,
+    letterSpacing: 4,
     textTransform: "uppercase",
-    color: D.gold,
-    marginBottom: 10,
+    color: T.gold,
+    marginBottom: 12,
   },
-  pageTitle: {
+  heroTitle: {
     fontFamily: "serif",
     fontSize: 36,
     fontWeight: "900",
-    color: D.text,
+    color: T.text,
     lineHeight: 38,
+    marginBottom: 14,
   },
-  pageTitleEm: { fontStyle: "italic", fontWeight: "400", color: D.gold },
-  seasonTag: {
-    borderWidth: 1,
-    borderColor: D.border,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    marginTop: 16,
-  },
-  seasonTagTxt: {
-    fontSize: 9,
-    letterSpacing: 3,
-    textTransform: "uppercase",
-    color: D.gold,
-  },
+  heroTitleEm: { fontStyle: "italic", fontWeight: "400", color: T.gold },
+  heroSub: { fontSize: 13, color: T.textSub, lineHeight: 22 },
 
-  statsRow: {
-    flexDirection: "row",
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: D.border,
-  },
-  statCell: { flex: 1, alignItems: "center" },
-  statVal: {
-    fontFamily: "serif",
-    fontSize: 26,
-    fontWeight: "900",
-    color: D.text,
-    lineHeight: 28,
-  },
-  statLbl: {
-    fontSize: 8,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: D.textMuted,
-    marginTop: 4,
-  },
+  rule: { height: 1, backgroundColor: T.border, marginBottom: 24 },
 
-  rule: { height: 1, backgroundColor: D.border },
-
-  gridWide: { flexDirection: "row", flexWrap: "wrap" },
-  gridMobile: { flexDirection: "column" },
-
-  // Card — fragrance-style: dark image panel + white content panel
+  // Card — same structure as fragrance card
   card: {
-    borderBottomWidth: 1,
-    borderBottomColor: D.border,
-    backgroundColor: D.bg,
+    borderWidth: 1,
+    borderColor: T.border,
+    backgroundColor: T.bg,
+    marginBottom: 16,
+    overflow: "hidden",
   },
-  heroCard: { backgroundColor: D.bg },
 
-  // Dark image panel — matches fragrance bottle panel
-  imgWrap: {
-    height: 300,
-    backgroundColor: D.bgDark,
+  // Dark image panel — matches fragrance bottleWrap
+  imageWrap: {
     alignItems: "center",
     justifyContent: "center",
-    position: "relative",
+    paddingVertical: 32,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1A1612",
+    backgroundColor: "#0C0B09",
   },
-  heroImgWrap: { height: 420, backgroundColor: D.bgDark },
-  img: { width: "80%", height: "80%" },
-  tagBadge: {
-    position: "absolute",
-    top: 16,
-    left: 16,
-    backgroundColor: D.gold,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  tagBadgeTxt: {
+  bagImg: { width: 260, height: 200 },
+  bagNumber: {
     fontSize: 8,
-    fontWeight: "700",
-    letterSpacing: 2,
+    letterSpacing: 3,
     textTransform: "uppercase",
-    color: "#FFFFFF",
+    marginTop: 12,
+    fontWeight: "600",
   },
 
-  // White content panel
-  cardContent: { padding: 24, backgroundColor: D.bg },
-  cardTitleRow: {
+  // White info panel — matches fragrance cardInfo
+  cardInfo: { padding: 20 },
+  cardHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 12,
+    marginBottom: 6,
   },
   cardName: {
     fontFamily: "serif",
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "900",
-    color: D.text,
-    lineHeight: 26,
+    color: T.text,
+    marginBottom: 3,
   },
   cardType: {
+    fontSize: 9,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: T.textSub,
+  },
+  cardPrice: { fontFamily: "serif", fontSize: 20, fontWeight: "700" },
+  cardPriceSub: {
+    fontSize: 9,
+    letterSpacing: 1,
+    color: T.textMuted,
+    marginTop: 1,
+  },
+  cardSubtitle: {
     fontFamily: "serif",
     fontStyle: "italic",
     fontSize: 13,
-    color: D.gold,
-    marginTop: 3,
-  },
-  cardPrice: {
-    fontSize: 20,
-    fontFamily: "serif",
-    fontWeight: "700",
-    color: D.gold,
-    textAlign: "right",
-    lineHeight: 24,
-  },
-  cardPriceSub: {
-    fontSize: 8,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    color: D.textMuted,
+    marginBottom: 12,
   },
   cardDesc: {
     fontSize: 13,
-    color: D.textSub,
-    lineHeight: 22,
-    marginBottom: 20,
+    color: T.textSub,
+    lineHeight: 20,
+    marginBottom: 16,
   },
 
+  // Details — like fragrance notes box
+  detailsBox: {
+    borderWidth: 1,
+    borderColor: T.border,
+    marginBottom: 16,
+    overflow: "hidden",
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    backgroundColor: T.bg,
+  },
+  detailBorder: { borderBottomWidth: 1, borderBottomColor: T.border },
+  detailDot: { fontSize: 8, marginRight: 10, width: 12 },
+  detailVal: { fontSize: 12, color: T.text, flex: 1 },
+
+  // Colorway
+  colorwaySection: { marginBottom: 16 },
   colorwayRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    marginBottom: 6,
+    marginBottom: 5,
   },
   colorwayLbl: {
     fontSize: 8,
     letterSpacing: 2,
     textTransform: "uppercase",
-    color: D.textMuted,
+    color: T.textMuted,
   },
   dots: { flexDirection: "row", gap: 8 },
   dot: {
@@ -862,86 +838,65 @@ const s = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "transparent",
   },
-  dotActive: { borderColor: D.gold, transform: [{ scale: 1.2 }] },
-  colorwayName: {
-    fontSize: 10,
-    color: D.textSub,
-    marginBottom: 20,
-    letterSpacing: 0.5,
-    fontStyle: "italic",
-  },
+  colorwayName: { fontSize: 10, color: T.textSub, fontStyle: "italic" },
 
-  actionsRow: {
+  // Footer row — like fragrance cardFoot
+  cardFoot: {
     flexDirection: "row",
-    gap: 10,
-    marginBottom: 14,
     alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
   },
-  notifyBtn: {
-    flex: 1,
-    backgroundColor: D.gold,
-    padding: 14,
-    alignItems: "center",
-  },
-  notifyBtnTxt: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 2,
+  notifyTag: { borderWidth: 1, paddingHorizontal: 16, paddingVertical: 9 },
+  notifyTagTxt: {
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: 1.5,
     textTransform: "uppercase",
-    color: "#FFFFFF",
   },
   likeBtn: {
     borderWidth: 1,
-    borderColor: D.border,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderColor: T.border,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
-  likeBtnActive: {
-    borderColor: D.gold,
-    backgroundColor: "rgba(184,150,62,0.08)",
-  },
-  likeIcon: { fontSize: 16, color: D.textMuted },
-  likeCount: { fontSize: 11, color: D.textMuted },
-
+  likeIcon: { fontSize: 14, color: T.textMuted },
+  likeCount: { fontSize: 11, color: T.textMuted },
   dropDate: {
     fontSize: 9,
-    letterSpacing: 2,
+    letterSpacing: 1.5,
     textTransform: "uppercase",
-    color: D.textMuted,
-    textAlign: "right",
+    color: T.textMuted,
+    marginLeft: "auto",
   },
 
-  quoteSection: {
-    borderTopWidth: 1,
-    borderTopColor: D.border,
-    padding: 40,
-    alignItems: "center",
-    backgroundColor: D.bgAlt,
-  },
-  quoteMark: {
-    fontFamily: "serif",
-    fontSize: 48,
-    color: D.gold,
-    lineHeight: 40,
+  // Footer strip — like fragrance NFC strip
+  footerStrip: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: T.greenBorder,
+    backgroundColor: T.greenBg,
     marginBottom: 8,
   },
-  quoteText: {
-    fontFamily: "serif",
-    fontStyle: "italic",
-    fontSize: 15,
-    color: D.textSub,
-    textAlign: "center",
-    lineHeight: 26,
-    maxWidth: 480,
-    marginBottom: 12,
+  footerDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: T.green,
+    marginTop: 4,
+    flexShrink: 0,
   },
-  quoteAttr: {
-    fontSize: 9,
-    letterSpacing: 3,
-    textTransform: "uppercase",
-    color: D.textMuted,
+  footerTitle: {
+    fontSize: 11,
+    color: T.green,
+    fontWeight: "600",
+    marginBottom: 4,
   },
+  footerSub: { fontSize: 11, color: T.textSub, lineHeight: 18 },
 });
