@@ -25,18 +25,22 @@ const IS_WIDE = IS_WEB && SCREEN_W >= 768;
 
 // ── Dark luxury theme ─────────────────────────────────────────
 const D = {
-  bg: "#0C0B09",
-  bgAlt: "#141210",
-  bgCard: "#1A1612",
-  border: "rgba(184,150,62,0.18)",
-  borderBright: "rgba(184,150,62,0.35)",
-  text: "#F5EFE0",
-  textSub: "#9A8E7A",
-  textMuted: "#5A5040",
+  bg: "#FFFFFF",
+  bgAlt: "#F8F6F2",
+  bgDeep: "#F2EFE9",
+  bgDark: "#0C0B09",
+  bgCard: "#F8F6F2",
+  border: "#E8E4DC",
+  borderDark: "#D4CFC6",
+  text: "#1A1814",
+  textSub: "#6B6458",
+  textMuted: "#9A9088",
   gold: "#B8963E",
-  goldLt: "#D4AF6A",
-  green: "#5BAF85",
-  red: "#C0614A",
+  goldLt: "#B8963E",
+  green: "#2D7A52",
+  greenBg: "#EEF7F2",
+  greenBorder: "#A8D4BC",
+  red: "#B84040",
 };
 
 // ── Piece data ────────────────────────────────────────────────
@@ -371,9 +375,9 @@ export default function AtelierScreen() {
           >
             <Text style={s.backTxt}>← Back</Text>
           </TouchableOpacity>
-          <View style={{ alignItems: "center" }}>
-            <Text style={s.topEye}>Michael By Christian</Text>
-          </View>
+          <Text style={s.topLogo}>
+            Michael <Text style={s.topLogoEm}>By Christian</Text>
+          </Text>
           <View style={{ width: 60 }} />
         </View>
       </SafeAreaView>
@@ -572,7 +576,7 @@ function PieceCard({
 // ── Notify form styles ────────────────────────────────────────
 const f = StyleSheet.create({
   box: {
-    backgroundColor: D.bgCard,
+    backgroundColor: D.bg,
     borderWidth: 1,
     borderColor: D.border,
     padding: 28,
@@ -623,13 +627,13 @@ const f = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 2,
     textTransform: "uppercase",
-    color: D.bg,
+    color: "#FFFFFF",
   },
   cancelBtn: { alignItems: "center", paddingVertical: 8 },
   cancelTxt: { fontSize: 10, color: D.textMuted, letterSpacing: 1 },
   successIcon: {
     fontSize: 24,
-    color: D.gold,
+    color: D.green,
     textAlign: "center",
     marginBottom: 10,
   },
@@ -666,7 +670,7 @@ const f = StyleSheet.create({
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: D.bg },
   topBar: {
-    backgroundColor: D.bgAlt,
+    backgroundColor: D.bg,
     borderBottomWidth: 1,
     borderBottomColor: D.border,
   },
@@ -678,12 +682,13 @@ const s = StyleSheet.create({
     paddingVertical: 14,
   },
   backTxt: { fontSize: 11, color: D.textSub },
-  topEye: {
-    fontSize: 8,
-    letterSpacing: 3,
-    textTransform: "uppercase",
-    color: D.gold,
+  topLogo: {
+    fontFamily: "serif",
+    fontSize: 15,
+    fontWeight: "700",
+    color: D.text,
   },
+  topLogoEm: { fontStyle: "italic", fontWeight: "400", color: D.gold },
 
   overlay: {
     position: "absolute",
@@ -691,7 +696,7 @@ const s = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(12,11,9,0.85)",
+    backgroundColor: "rgba(0,0,0,0.5)",
     zIndex: 100,
     alignItems: "center",
     justifyContent: "center",
@@ -702,6 +707,7 @@ const s = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: 28,
     paddingHorizontal: 24,
+    backgroundColor: D.bg,
   },
   pageEye: {
     fontSize: 8,
@@ -712,12 +718,12 @@ const s = StyleSheet.create({
   },
   pageTitle: {
     fontFamily: "serif",
-    fontSize: 42,
+    fontSize: 36,
     fontWeight: "900",
     color: D.text,
-    lineHeight: 44,
+    lineHeight: 38,
   },
-  pageTitleEm: { fontStyle: "italic", fontWeight: "400", color: D.goldLt },
+  pageTitleEm: { fontStyle: "italic", fontWeight: "400", color: D.gold },
   seasonTag: {
     borderWidth: 1,
     borderColor: D.border,
@@ -736,14 +742,16 @@ const s = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: 24,
     paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: D.border,
   },
   statCell: { flex: 1, alignItems: "center" },
   statVal: {
     fontFamily: "serif",
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "900",
     color: D.text,
-    lineHeight: 30,
+    lineHeight: 28,
   },
   statLbl: {
     fontSize: 8,
@@ -753,26 +761,29 @@ const s = StyleSheet.create({
     marginTop: 4,
   },
 
-  rule: { height: 1, backgroundColor: D.border, marginHorizontal: 0 },
+  rule: { height: 1, backgroundColor: D.border },
 
   gridWide: { flexDirection: "row", flexWrap: "wrap" },
   gridMobile: { flexDirection: "column" },
 
+  // Card — fragrance-style: dark image panel + white content panel
   card: {
     borderBottomWidth: 1,
     borderBottomColor: D.border,
     backgroundColor: D.bg,
   },
   heroCard: { backgroundColor: D.bg },
+
+  // Dark image panel — matches fragrance bottle panel
   imgWrap: {
     height: 300,
-    backgroundColor: "#0C0B09",
+    backgroundColor: D.bgDark,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
   },
-  heroImgWrap: { height: 400 },
-  img: { width: "85%", height: "85%" },
+  heroImgWrap: { height: 420, backgroundColor: D.bgDark },
+  img: { width: "80%", height: "80%" },
   tagBadge: {
     position: "absolute",
     top: 16,
@@ -786,10 +797,11 @@ const s = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 2,
     textTransform: "uppercase",
-    color: D.bg,
+    color: "#FFFFFF",
   },
 
-  cardContent: { padding: 24 },
+  // White content panel
+  cardContent: { padding: 24, backgroundColor: D.bg },
   cardTitleRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -803,17 +815,17 @@ const s = StyleSheet.create({
     lineHeight: 26,
   },
   cardType: {
-    fontSize: 9,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: D.textSub,
-    marginTop: 4,
+    fontFamily: "serif",
+    fontStyle: "italic",
+    fontSize: 13,
+    color: D.gold,
+    marginTop: 3,
   },
   cardPrice: {
     fontSize: 20,
     fontFamily: "serif",
     fontWeight: "700",
-    color: D.goldLt,
+    color: D.gold,
     textAlign: "right",
     lineHeight: 24,
   },
@@ -822,7 +834,6 @@ const s = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase",
     color: D.textMuted,
-    fontFamily: "serif",
   },
   cardDesc: {
     fontSize: 13,
@@ -843,32 +854,33 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     color: D.textMuted,
   },
-  dots: { flexDirection: "row", gap: 6 },
+  dots: { flexDirection: "row", gap: 8 },
   dot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 1,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
     borderColor: "transparent",
   },
-  dotActive: { borderColor: D.gold, transform: [{ scale: 1.25 }] },
+  dotActive: { borderColor: D.gold, transform: [{ scale: 1.2 }] },
   colorwayName: {
     fontSize: 10,
     color: D.textSub,
     marginBottom: 20,
     letterSpacing: 0.5,
+    fontStyle: "italic",
   },
 
   actionsRow: {
     flexDirection: "row",
     gap: 10,
-    marginBottom: 16,
+    marginBottom: 14,
     alignItems: "center",
   },
   notifyBtn: {
     flex: 1,
     backgroundColor: D.gold,
-    padding: 13,
+    padding: 14,
     alignItems: "center",
   },
   notifyBtnTxt: {
@@ -876,13 +888,13 @@ const s = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 2,
     textTransform: "uppercase",
-    color: D.bg,
+    color: "#FFFFFF",
   },
   likeBtn: {
     borderWidth: 1,
     borderColor: D.border,
     paddingHorizontal: 16,
-    paddingVertical: 13,
+    paddingVertical: 14,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -891,8 +903,8 @@ const s = StyleSheet.create({
     borderColor: D.gold,
     backgroundColor: "rgba(184,150,62,0.08)",
   },
-  likeIcon: { fontSize: 16, color: D.textSub },
-  likeCount: { fontSize: 11, color: D.textSub },
+  likeIcon: { fontSize: 16, color: D.textMuted },
+  likeCount: { fontSize: 11, color: D.textMuted },
 
   dropDate: {
     fontSize: 9,
@@ -907,6 +919,7 @@ const s = StyleSheet.create({
     borderTopColor: D.border,
     padding: 40,
     alignItems: "center",
+    backgroundColor: D.bgAlt,
   },
   quoteMark: {
     fontFamily: "serif",
