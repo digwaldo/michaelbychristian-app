@@ -58,12 +58,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) loadProfile(session.user.id);
-      else setLoading(false);
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          loadProfile(session.user.id).finally(() => setLoading(false));
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch(() => setLoading(false));
 
     // Listen for auth changes
     const {
@@ -71,11 +77,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) await loadProfile(session.user.id);
-      else {
+      if (session?.user) {
+        await loadProfile(session.user.id).catch(() => {});
+      } else {
         setProfile(null);
-        setLoading(false);
       }
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -95,8 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(data ?? null);
     } catch (e) {
       console.log("Profile load failed:", e);
-    } finally {
-      setLoading(false);
+      setProfile(null);
     }
   }
 
