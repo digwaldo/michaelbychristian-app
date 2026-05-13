@@ -13,6 +13,7 @@ export default function RootLayout() {
         <Stack.Screen name="fragrance/[id]" />
         <Stack.Screen name="auth" />
         <Stack.Screen name="profile" />
+        <Stack.Screen name="atelier" />
         <Stack.Screen name="+not-found" />
       </Stack>
     </AuthProvider>

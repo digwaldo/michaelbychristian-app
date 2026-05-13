@@ -355,6 +355,7 @@ export default function HomeScreen() {
   // ── NAV_LINKS — main branch ──────────────────────────────────
   const NAV_LINKS = [
     { label: "Fragrances", path: "/fragrance", gold: true },
+    { label: "The Atelier", path: "/atelier", gold: true },
     { label: "Rarity", path: "/rarity" },
     session
       ? { label: "My Profile", path: "/profile" }
