@@ -53,6 +53,7 @@ const PIECES = [
       "Phygital authenticated",
     ],
     accent: "#B8963E",
+    imageBg: "#0C0B09",
     colorways: [
       {
         name: "Rose Blush",
@@ -92,6 +93,7 @@ const PIECES = [
       "Color-blocked construction",
     ],
     accent: "#2C6B6B",
+    imageBg: "#F2F0EC",
     colorways: [
       {
         name: "Teal + Cream Handles",
@@ -131,6 +133,7 @@ const PIECES = [
       "Pebbled leather body",
     ],
     accent: "#8C6F28",
+    imageBg: "#2A2A2A",
     colorways: [
       {
         name: "Ivory + Tan",
@@ -175,6 +178,7 @@ const PIECES = [
       "Phygital authenticated",
     ],
     accent: "#2C6B6B",
+    imageBg: "#F2F0EC",
     colorways: [
       {
         name: "Teal + Burgundy",
@@ -439,7 +443,7 @@ export default function AtelierScreen() {
             return (
               <View key={piece.id} style={s.card}>
                 {/* Dark image panel — like fragrance bottle wrap */}
-                <View style={s.imageWrap}>
+                <View style={[s.imageWrap, { backgroundColor: piece.imageBg }]}>
                   <Image
                     source={cw.image}
                     style={s.bagImg}
@@ -746,8 +750,7 @@ const s = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 32,
     borderBottomWidth: 1,
-    borderBottomColor: "#1A1612",
-    backgroundColor: "#0C0B09",
+    borderBottomColor: T.border,
   },
   bagImg: { width: 260, height: 200 },
   bagNumber: {
